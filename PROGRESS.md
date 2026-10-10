@@ -53,3 +53,20 @@
 - Checks: HTTPS 200 (cert valid to 2027-01-08), Mini App + deep link 200, /api/health ok, admin panel 200
   (`Cache-Control: no-cache`), owner login OK, all admin sections 200, bot polling @prime_f1z_bot,
   no errors in API logs, bot token not present in logs.
+
+## Stage 5 — Admin panel inside the Telegram Mini App ✅
+- Profile page of the Mini App: «🛡 Админ-панель» card (below the stats, above «Мои покупки»), shown only
+  when `GET /api/me/admin-access` (signed initData) confirms owner/admin.
+- Roles from Telegram id, server-side only: OWNER_TELEGRAM_ID → owner; staff account with linked Telegram ID
+  → its role; ADMIN_TELEGRAM_IDS → admin. Support role is not allowed from the Mini App.
+- The existing /admin/ opens in the same WebView (`location.assign('/admin/')`); Telegram's script keeps
+  initData for same-origin pages. The panel exchanges it via `POST /api/admin/telegram-login`
+  (`Authorization: tma …`) for a 1-hour token kept in sessionStorage — never in a URL. Role is re-checked on
+  every request; expired token → silent re-exchange; revoked access → 401.
+- «← Магазин» in the header, «В магазин» in the menu, Telegram BackButton → shop. No-access screen for others.
+- Caddy: admin uses `frame-ancestors 'self' https://web.telegram.org https://*.telegram.org` instead of
+  `X-Frame-Options: DENY`, so web/desktop Telegram can show it too.
+- Settings → Команда: link a staff account to a Telegram ID. Migration 0003.
+- Tests: 77 passed (8 new in tests/test_miniapp_admin.py). E2E with the real telegram-web-app.js: owner sees
+  the button, panel opens without login form, token only in sessionStorage, no JWT in any URL, back to shop
+  keeps the session; regular user: no button, /admin/ → «Нет доступа», admin API 401, exchange 403.

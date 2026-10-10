@@ -37,6 +37,7 @@ export const api = {
   config: () => request<PublicConfig>('/api/config'),
   me: () => request<Me>('/api/me'),
   transactions: () => request<Transaction[]>('/api/me/transactions'),
+  adminAccess: () => request<{ allowed: boolean; role: 'owner' | 'admin' | null }>('/api/me/admin-access'),
   countries: () => request<CountryCatalog[]>('/api/countries'),
   categories: () => request<Category[]>('/api/categories'),
   products: (params: { category?: string; popular?: boolean; country_id?: number } = {}) => {

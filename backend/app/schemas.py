@@ -388,18 +388,21 @@ class AdminAccountIn(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.\-]+$")
     password: str = Field(min_length=10, max_length=128)
     role: Literal["admin", "support"] = "support"
+    telegram_id: int | None = Field(default=None, gt=0, lt=10**15)
 
 
 class AdminAccountPatch(BaseModel):
     role: Literal["admin", "support"] | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=10, max_length=128)
+    telegram_id: int | None = Field(default=None, ge=0, lt=10**15)  # 0 = unlink
 
 
 class AdminAccountOut(ORM):
     id: int
     username: str
     role: str
+    telegram_id: int | None = None
     is_active: bool
     last_login_at: datetime | None
     created_at: datetime

@@ -40,6 +40,6 @@ export interface Ticket {
 export interface Transaction { id: number; type: string; amount: number; balance_after: number; description: string; order_id: number | null; created_at: string }
 export interface Paged<T> { total: number; items: T[] }
 export interface SettingRow { key: string; value: string; description: string; is_public: boolean; type: 'bool' | 'number' | 'text' }
-export interface Account { id: number; username: string; role: Role; is_active: boolean; last_login_at: string | null; created_at: string }
+export interface Account { id: number; username: string; role: Role; is_active: boolean; telegram_id: number | null; last_login_at: string | null; created_at: string }
 export interface AuditRow { id: number; admin: string; action: string; entity: string; entity_id: number | null; details: Record<string, unknown>; created_at: string }
 export interface SeriesPoint { date: string; revenue?: number; orders?: number; users?: number }

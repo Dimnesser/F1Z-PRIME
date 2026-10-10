@@ -327,6 +327,8 @@ class AdminUser(TimestampMixin, Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[AdminRole] = mapped_column(_enum(AdminRole, "admin_role"), default=AdminRole.support, nullable=False)
+    # Optional link to a Telegram account: lets this person open the admin panel from the Mini App.
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

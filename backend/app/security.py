@@ -119,10 +119,18 @@ def check_admin_credentials(username: str, password: str, settings: Any) -> bool
     return user_ok and pass_ok
 
 
-def create_admin_token(username: str, secret_key: str, ttl_hours: int, level: str = "owner", source: str = "env") -> str:
-    """`role: admin` marks an admin-panel token; `lvl` is owner/admin/support, `src` is env (.env owner) or db."""
+def create_admin_token(
+    username: str, secret_key: str, ttl_hours: float, level: str = "owner", source: str = "env",
+    telegram_id: int | None = None,
+) -> str:
+    """`role: admin` marks an admin-panel token; `lvl` is owner/admin/support,
+    `src` is env (.env owner), db (staff account) or tg (Telegram Mini App session, `tid` = Telegram id)."""
     now = int(time.time())
-    payload = {"sub": username, "role": "admin", "lvl": level, "src": source, "iat": now, "exp": now + ttl_hours * 3600}
+    payload: dict[str, Any] = {
+        "sub": username, "role": "admin", "lvl": level, "src": source, "iat": now, "exp": now + int(ttl_hours * 3600),
+    }
+    if telegram_id is not None:
+        payload["tid"] = telegram_id
     return jwt.encode(payload, secret_key, algorithm="HS256")
 
 

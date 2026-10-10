@@ -103,3 +103,11 @@ export function openExternal(url: string): void {
   else if (tg?.openLink) tg.openLink(url)
   else window.open(url, '_blank', 'noopener')
 }
+
+/** Opens the existing admin panel (/admin/) inside the same Mini App WebView — no external browser.
+ * Telegram keeps the signed initData for same-origin navigation; the panel exchanges it for a
+ * short-lived token itself, so nothing secret is put into the URL. */
+export function openAdminPanel(): void {
+  haptic.tap('medium')
+  window.location.assign('/admin/')
+}

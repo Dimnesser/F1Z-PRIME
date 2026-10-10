@@ -1,11 +1,12 @@
 import clsx from 'clsx'
 import {
-  Boxes, ChevronsLeft, CreditCard, Gem, Globe2, Headphones, LayoutDashboard, LogOut, MoreHorizontal, Settings,
+  ArrowLeft, Boxes, ChevronsLeft, Store, CreditCard, Gem, Globe2, Headphones, LayoutDashboard, LogOut, MoreHorizontal, Settings,
   ShoppingCart, Users, Workflow, X,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useMe } from '../lib/session'
+import { backToShop, inTelegram } from '../lib/telegram'
 import type { Role } from '../lib/types'
 
 export const NAV: { to: string; label: string; icon: typeof Users; roles?: Role[]; badge?: 'tickets' | 'review' }[] = [
@@ -87,9 +88,15 @@ export function Layout({ children, onLogout, counters }: { children: ReactNode; 
             </div>
           )}
           <div className={clsx('flex gap-1', collapsed && 'flex-col items-center')}>
-            <button type="button" onClick={onLogout} title="Выйти" className="flex h-9 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-muted hover:bg-danger/10 hover:text-danger">
-              <LogOut className="h-4 w-4" />{!collapsed && 'Выйти'}
-            </button>
+            {inTelegram ? (
+              <button type="button" onClick={backToShop} title="В магазин" className="flex h-9 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-muted hover:bg-white/[0.05] hover:text-ink">
+                <Store className="h-4 w-4" />{!collapsed && 'В магазин'}
+              </button>
+            ) : (
+              <button type="button" onClick={onLogout} title="Выйти" className="flex h-9 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-muted hover:bg-danger/10 hover:text-danger">
+                <LogOut className="h-4 w-4" />{!collapsed && 'Выйти'}
+              </button>
+            )}
             <button type="button" onClick={toggle} title={collapsed ? 'Развернуть' : 'Свернуть'} className="grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-white/[0.05] hover:text-ink">
               <ChevronsLeft className={clsx('h-4 w-4 transition-transform', collapsed && 'rotate-180')} />
             </button>
@@ -100,9 +107,15 @@ export function Layout({ children, onLogout, counters }: { children: ReactNode; 
       <main className="min-w-0 flex-1">
         {/* mobile top bar */}
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/[0.06] bg-bg/85 px-4 backdrop-blur-xl lg:hidden">
-          <div className="flex items-center gap-2.5">
-            <img src="/admin/brand.jpg" alt="" className="h-8 w-8 rounded-lg object-cover" />
-            <span className="font-display text-[15px] font-bold">F1Z <span className="text-primary-soft">PRIME</span></span>
+          <div className="flex min-w-0 items-center gap-2.5">
+            {inTelegram ? (
+              <button type="button" onClick={backToShop} className="-ml-1 flex h-10 items-center gap-1.5 rounded-xl bg-white/[0.06] pl-2.5 pr-3.5 text-[13.5px] font-semibold active:scale-[0.97]">
+                <ArrowLeft className="h-4 w-4" /> Магазин
+              </button>
+            ) : (
+              <img src="/admin/brand.jpg" alt="" className="h-8 w-8 rounded-lg object-cover" />
+            )}
+            <span className="truncate font-display text-[15px] font-bold">{inTelegram ? 'Админ-панель' : <>F1Z <span className="text-primary-soft">PRIME</span></>}</span>
           </div>
           <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-muted">{me.role_label}</span>
         </header>
@@ -146,9 +159,15 @@ export function Layout({ children, onLogout, counters }: { children: ReactNode; 
                   {count(badge) > 0 && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-warning" />}
                 </NavLink>
               ))}
-              <button type="button" onClick={onLogout} className="flex flex-col items-center gap-2 rounded-2xl bg-danger/10 p-3 text-[12px] font-semibold text-danger">
-                <LogOut className="h-6 w-6" />Выйти
-              </button>
+              {inTelegram ? (
+                <button type="button" onClick={backToShop} className="flex flex-col items-center gap-2 rounded-2xl bg-secondary/10 p-3 text-[12px] font-semibold text-secondary">
+                  <Store className="h-6 w-6" />В магазин
+                </button>
+              ) : (
+                <button type="button" onClick={onLogout} className="flex flex-col items-center gap-2 rounded-2xl bg-danger/10 p-3 text-[12px] font-semibold text-danger">
+                  <LogOut className="h-6 w-6" />Выйти
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -169,10 +169,16 @@ async def create_account(body: AdminAccountIn, admin: OwnerDep, session: Session
         select(AdminUser.id).where(AdminUser.username == body.username)
     ):
         raise HTTPException(409, "Логин уже занят")
-    account = AdminUser(username=body.username, password_hash=hash_password(body.password), role=AdminRole(body.role))
+    if body.telegram_id and await session.scalar(select(AdminUser.id).where(AdminUser.telegram_id == body.telegram_id)):
+        raise HTTPException(409, "Этот Telegram ID уже привязан к другому сотруднику")
+    account = AdminUser(
+        username=body.username, password_hash=hash_password(body.password), role=AdminRole(body.role),
+        telegram_id=body.telegram_id,
+    )
     session.add(account)
     await session.flush()
-    log_admin(session, admin, "create", "admin_account", account.id, username=body.username, role=body.role)
+    log_admin(session, admin, "create", "admin_account", account.id, username=body.username, role=body.role,
+              telegram_id=body.telegram_id)
     await session.commit()
     return account
 
@@ -192,6 +198,14 @@ async def update_account(account_id: int, body: AdminAccountPatch, admin: OwnerD
     if body.password:
         account.password_hash = hash_password(body.password)
         details["password"] = "changed"
+    if body.telegram_id is not None:
+        tid = body.telegram_id or None
+        if tid and await session.scalar(
+            select(AdminUser.id).where(AdminUser.telegram_id == tid, AdminUser.id != account.id)
+        ):
+            raise HTTPException(409, "Этот Telegram ID уже привязан к другому сотруднику")
+        account.telegram_id = tid
+        details["telegram_id"] = tid
     log_admin(session, admin, "update", "admin_account", account.id, **details)
     await session.commit()
     return account

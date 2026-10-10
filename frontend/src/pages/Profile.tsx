@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, ChevronRight, Copy, Headphones, Package, Plus, ShoppingCart, Wallet } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, ChevronRight, Copy, Headphones, Package, Plus, ShieldCheck, ShoppingCart, Wallet } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { useToast } from '../components/Toast'
@@ -9,6 +9,7 @@ import { api } from '../lib/api'
 import { date, money, shortDate, TX_LABEL } from '../lib/format'
 import { useConfig, useMe } from '../lib/queries'
 import { useShop } from '../lib/shop'
+import { openAdminPanel } from '../lib/telegram'
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -17,6 +18,8 @@ export default function Profile() {
   const { data: me, isLoading } = useMe()
   const { data: config } = useConfig()
   const { data: txs, isLoading: txLoading } = useQuery({ queryKey: ['transactions'], queryFn: api.transactions })
+  // shown only when the server confirms owner/admin for this Telegram account
+  const { data: access } = useQuery({ queryKey: ['admin-access'], queryFn: api.adminAccess, staleTime: 60_000, retry: false })
 
   if (isLoading || !me) return <div className="space-y-4"><Skeleton className="h-48 rounded-[32px]" /><Skeleton className="h-40 rounded-3xl" /></div>
 
@@ -61,6 +64,27 @@ export default function Profile() {
           </motion.div>
         ))}
       </motion.div>
+
+      {access?.allowed && (
+        <button
+          type="button"
+          onClick={openAdminPanel}
+          className="fade-in group relative flex w-full items-center gap-3.5 overflow-hidden rounded-3xl bg-brand p-[1.5px] text-left shadow-glow pressable"
+        >
+          <span className="flex w-full items-center gap-3.5 rounded-[calc(1.5rem-1.5px)] bg-[linear-gradient(135deg,#1d1440_0%,#111027_55%,#0c1c26_100%)] px-4 py-3.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/20 text-primary-soft ring-1 ring-primary/30">
+              <ShieldCheck className="h-[22px] w-[22px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15.5px] font-bold">🛡 Админ-панель</span>
+              <span className="block truncate text-[12px] text-muted">
+                {access.role === 'owner' ? 'Владелец' : 'Администратор'} · заказы, товары, финансы
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 text-primary-soft transition group-active:translate-x-0.5" />
+          </span>
+        </button>
+      )}
 
       <div className="card divide-y divide-white/[0.06]">
         {[

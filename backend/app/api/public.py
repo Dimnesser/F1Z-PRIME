@@ -227,6 +227,16 @@ async def me(user: UserDep) -> object:
     return user
 
 
+@router.get("/me/admin-access")
+async def my_admin_access(user: UserDep, session: SessionDep) -> dict:
+    """Whether to show the «Админ-панель» button. Decided on the server from the Telegram id in signed initData."""
+    from app.services.admin_access import MINIAPP_ROLES, telegram_role
+
+    role = await telegram_role(session, user.telegram_id)
+    allowed = role in MINIAPP_ROLES
+    return {"allowed": allowed, "role": role if allowed else None}
+
+
 @router.get("/me/transactions", response_model=list[TransactionOut])
 async def my_transactions(user: UserDep, session: SessionDep, limit: int = Query(50, ge=1, le=200)) -> list:
     stmt = (

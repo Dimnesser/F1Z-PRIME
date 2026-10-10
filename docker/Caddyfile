@@ -15,7 +15,8 @@
 	# Admin panel (SPA, served under /admin)
 	handle_path /admin* {
 		root * /srv/admin
-		header X-Frame-Options "DENY"
+		# Opened inside the Telegram Mini App: web/desktop Telegram embed it in an iframe, so allow only Telegram as a frame parent.
+		header Content-Security-Policy "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
 		header X-Robots-Tag "noindex, nofollow"
 		# hashed bundles are immutable; index.html must always be revalidated so a deploy is picked up
 		@adminassets path /assets/*

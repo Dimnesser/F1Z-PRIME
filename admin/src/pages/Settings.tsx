@@ -1,4 +1,4 @@
-import { KeyRound, Plus, ShieldCheck, UserX } from 'lucide-react'
+import { KeyRound, Plus, Send, ShieldCheck, UserX } from 'lucide-react'
 import { useState } from 'react'
 import { SettingsSection, useSettings } from '../components/SettingsForm'
 import { Badge, Btn, Card, Chips, DataTable, ErrorBox, Field, Modal, PageHead, Tabs, useConfirm, useToast, type Tone } from '../components/ui'
@@ -78,9 +78,8 @@ export default function Settings() {
 }
 
 function Team() {
-  const me = useMe()
   const { data, loading, error, reload } = useApi<Account[]>('/accounts')
-  const [form, setForm] = useState<{ username: string; password: string; role: 'admin' | 'support' } | null>(null)
+  const [form, setForm] = useState<{ username: string; password: string; role: 'admin' | 'support'; telegram_id: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   const confirm = useConfirm()
@@ -88,7 +87,7 @@ function Team() {
     if (!form) return
     setBusy(true)
     try {
-      await api('/accounts', { method: 'POST', body: form })
+      await api('/accounts', { method: 'POST', body: { ...form, telegram_id: form.telegram_id ? Number(form.telegram_id) : null } })
       toast('Учётная запись создана')
       setForm(null)
       reload(true)
@@ -103,6 +102,17 @@ function Team() {
     if (pwd.length < 10) { toast('Пароль должен быть не короче 10 символов', 'error'); return }
     await patch(a, { password: pwd }, 'Пароль изменён')
   }
+  const linkTelegram = async (a: Account) => {
+    const v = await confirm({
+      title: `Telegram ID для ${a.username}`,
+      text: 'С этим Telegram-аккаунтом сотрудник (роль «Администратор») увидит кнопку «Админ-панель» в профиле Mini App. Оставьте пустым, чтобы отвязать.',
+      input: { label: 'Telegram ID (цифры)', placeholder: a.telegram_id ? String(a.telegram_id) : '123456789' },
+      confirmLabel: 'Сохранить',
+    })
+    if (v === false) return
+    if (v && !/^\d{3,15}$/.test(v)) { toast('Telegram ID — только цифры', 'error'); return }
+    await patch(a, { telegram_id: v ? Number(v) : 0 }, v ? 'Telegram привязан' : 'Telegram отвязан')
+  }
   const toggleActive = async (a: Account) => {
     if (a.is_active && await confirm({ title: `Отключить ${a.username}?`, text: 'Все сессии этого сотрудника завершатся сразу.', danger: true, confirmLabel: 'Отключить' }) === false) return
     await patch(a, { is_active: !a.is_active }, a.is_active ? 'Доступ отключён' : 'Доступ включён')
@@ -115,9 +125,9 @@ function Team() {
             <div key={r} className="rounded-xl bg-white/[0.03] p-3"><Badge tone={ROLE[r].tone}>{ROLE[r].label}</Badge><p className="mt-2 text-xs text-muted">{ROLE[r].text}</p></div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-muted">Владелец — учётная запись <b className="text-ink">{me.username}</b> из настроек сервера (.env). Её пароль меняется только на сервере.</p>
+        <p className="mt-3 text-xs text-muted">Владелец — учётная запись из настроек сервера (.env); её пароль меняется только на сервере. В Mini App кнопку «Админ-панель» видят владелец (OWNER_TELEGRAM_ID), администраторы из ADMIN_TELEGRAM_IDS и сотрудники-администраторы с привязанным Telegram ID.</p>
       </Card>
-      <div className="flex justify-end"><Btn onClick={() => setForm({ username: '', password: '', role: 'support' })}><Plus className="h-4 w-4" /> Сотрудник</Btn></div>
+      <div className="flex justify-end"><Btn onClick={() => setForm({ username: '', password: '', role: 'support', telegram_id: '' })}><Plus className="h-4 w-4" /> Сотрудник</Btn></div>
       {error && <ErrorBox text={error} />}
       <DataTable rows={data} loading={loading} rowKey={(a) => a.id} emptyText="Сотрудников пока нет"
         columns={[
@@ -128,6 +138,7 @@ function Team() {
             </select>
           ) },
           { header: 'Статус', cell: (a) => a.is_active ? <Badge tone="green" dot>Активен</Badge> : <Badge tone="gray" dot>Отключён</Badge> },
+          { header: 'Telegram', cell: (a) => <button type="button" className="font-mono text-sm text-muted hover:text-ink" onClick={() => linkTelegram(a)}>{a.telegram_id ?? 'привязать'}</button> },
           { header: 'Последний вход', cell: (a) => <span className="text-muted">{ago(a.last_login_at)}</span> },
           { header: 'Создан', cell: (a) => <span className="text-muted">{dt(a.created_at)}</span> },
           { header: '', align: 'right', cell: (a) => (
@@ -146,6 +157,7 @@ function Team() {
             <div className="mt-3 flex gap-2">
               <Btn size="sm" variant="secondary" onClick={() => patch(a, { role: a.role === 'admin' ? 'support' : 'admin' }, 'Роль изменена')}>{a.role === 'admin' ? '→ Поддержка' : '→ Администратор'}</Btn>
               <Btn size="sm" variant="secondary" onClick={() => resetPassword(a)}><KeyRound className="h-4 w-4" /></Btn>
+              <Btn size="sm" variant="secondary" onClick={() => linkTelegram(a)}><Send className="h-4 w-4" /></Btn>
               <Btn size="sm" variant={a.is_active ? 'danger' : 'success'} onClick={() => toggleActive(a)}>{a.is_active ? 'Отключить' : 'Включить'}</Btn>
             </div>
           </div>
@@ -156,6 +168,9 @@ function Team() {
           <div className="space-y-4">
             <Field label="Логин" hint="Латиница, цифры, точка, дефис"><input className="input" autoCapitalize="none" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.replace(/[^A-Za-z0-9_.-]/g, '') })} /></Field>
             <Field label="Пароль" hint="Не короче 10 символов. Передайте сотруднику лично."><input className="input" type="text" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
+            <Field label="Telegram ID (необязательно)" hint="Для входа в админку из Mini App (только роль «Администратор»)">
+              <input className="input font-mono" inputMode="numeric" value={form.telegram_id} onChange={(e) => setForm({ ...form, telegram_id: e.target.value.replace(/\D/g, '') })} placeholder="123456789" />
+            </Field>
             <Field label="Роль">
               <Chips value={form.role} onChange={(v) => setForm({ ...form, role: v })} options={[{ value: 'support', label: 'Поддержка' }, { value: 'admin', label: 'Администратор' }]} />
             </Field>

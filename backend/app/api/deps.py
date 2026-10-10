@@ -94,7 +94,17 @@ async def current_admin(
     if claims is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия администратора истекла")
     username = str(claims["sub"])
-    if claims.get("src", "env") == "env":
+    source = claims.get("src", "env")
+    if source == "tg":
+        # Mini App session: the role is re-checked on every request, so removing someone from
+        # OWNER/ADMIN_TELEGRAM_IDS or deactivating their account cuts access immediately.
+        from app.services.admin_access import MINIAPP_ROLES, telegram_role
+
+        tid = claims.get("tid")
+        role = await telegram_role(session, int(tid)) if isinstance(tid, int) else None
+        if role not in MINIAPP_ROLES:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Доступ к админ-панели отозван")
+    elif source == "env":
         if username != settings.admin_username:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия администратора истекла")
         role = "owner"

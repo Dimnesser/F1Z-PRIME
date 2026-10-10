@@ -12,7 +12,9 @@ from collections import defaultdict, deque
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import selectinload
@@ -72,7 +74,8 @@ from app.schemas import (
     TransactionOut,
     UserPatch,
 )
-from app.security import check_admin_credentials, create_admin_token, verify_password
+from app.security import InitDataError, check_admin_credentials, create_admin_token, validate_init_data, verify_password
+from app.services import admin_access
 from app.services import masks
 from app.services import orders as order_service
 from app.services import payments as payment_service
@@ -175,6 +178,47 @@ async def login(body: AdminLogin, request: Request, session: SessionDep) -> dict
         "username": body.username,
         "role": role,
         "expires_in": s.admin_token_ttl_hours * 3600,
+    }
+
+
+@router.post("/telegram-login")
+async def telegram_login(
+    request: Request,
+    session: SessionDep,
+    authorization: Annotated[str | None, Header()] = None,
+) -> dict:
+    """Exchange signed Telegram initData (header `Authorization: tma <initData>`) for a short-lived admin token.
+
+    Used when /admin/ is opened inside the Mini App. The token is returned in the body only (never in a URL);
+    the role comes from the server-side Telegram id lists / linked staff accounts, not from the client."""
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0]
+    attempts = _login_attempts[ip]
+    now = time.monotonic()
+    while attempts and now - attempts[0] > LOGIN_WINDOW:
+        attempts.popleft()
+    if len(attempts) >= LOGIN_MAX:
+        raise HTTPException(429, "Слишком много попыток входа. Попробуйте через 5 минут.")
+    s = get_settings()
+    init_data = authorization[4:].strip() if authorization and authorization.lower().startswith("tma ") else ""
+    try:
+        tg = validate_init_data(init_data, s.bot_token, s.init_data_ttl_seconds)
+    except InitDataError as exc:
+        attempts.append(now)
+        raise HTTPException(401, "Откройте админ-панель из Telegram") from exc
+    role = await admin_access.telegram_role(session, tg.id)
+    if role not in admin_access.MINIAPP_ROLES:
+        attempts.append(now)
+        raise HTTPException(403, "У этого Telegram-аккаунта нет доступа к админ-панели")
+    attempts.clear()
+    label = admin_access.telegram_label(tg.id, tg.username)
+    log_admin(session, label, "login_telegram", "admin", None, ip=ip, telegram_id=tg.id)
+    await session.commit()
+    ttl = admin_access.TELEGRAM_TOKEN_TTL_HOURS
+    return {
+        "token": create_admin_token(label, s.secret_key, ttl, role, "tg", telegram_id=tg.id),
+        "username": label,
+        "role": role,
+        "expires_in": int(ttl * 3600),
     }
 
 
@@ -1074,7 +1118,7 @@ async def ticket_status(ticket_id: int, body: TicketStatusIn, admin: StaffDep, s
 async def ticket_assign(ticket_id: int, body: TicketAssign, admin: StaffDep, session: SessionDep) -> SupportTicket:
     ticket = await _ticket(session, ticket_id)
     target = (body.assigned_to or "").strip() or None
-    if target and target != get_settings().admin_username:
+    if target and target not in (get_settings().admin_username, str(admin)):
         account = await session.scalar(select(AdminUser).where(AdminUser.username == target, AdminUser.is_active.is_(True)))
         if account is None:
             raise HTTPException(422, "Оператор не найден")
