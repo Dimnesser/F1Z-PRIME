@@ -8,7 +8,7 @@ export function CountryCard({ c, onBuy, onOpen }: { c: CountryCatalog; onBuy: ()
   const inStock = c.stock > 0 && c.product_id !== null
   return (
     <motion.div className="card group relative overflow-hidden p-4" onClick={onOpen}>
-      <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-primary/10 blur-2xl transition group-active:bg-primary/20" />
+      <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.22),transparent)]" />
       <div className="flex items-center gap-3.5">
         <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/[0.05] text-[32px] ring-1 ring-white/10">
           {c.flag}
@@ -65,7 +65,7 @@ export function PremiumCard({ n, onOpen, wide = false }: { n: PremiumNumber; onO
       className={clsx('relative shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br p-[1.5px] text-left', TIER_STYLE[n.tier] ?? TIER_STYLE.premium, wide ? 'w-full' : 'w-[250px]')}
     >
       <div className="relative h-full rounded-[22px] bg-card/95 p-4">
-        <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.44),transparent)]" />
         <div className="flex items-center justify-between">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ink/90">
             <Gem className="h-3 w-3 text-primary-soft" /> {n.tier === 'premium' ? 'premium number' : n.tier}
@@ -97,7 +97,7 @@ export function ProductMini({ p, onOpen }: { p: Product; onOpen: () => void }) {
       onClick={onOpen}
       className="card relative w-[156px] shrink-0 overflow-hidden p-3.5 text-left"
     >
-      <div className="pointer-events-none absolute -left-6 -top-6 h-20 w-20 rounded-full bg-secondary/10 blur-2xl" />
+      <div className="pointer-events-none absolute -left-6 -top-6 h-20 w-20 rounded-full bg-[radial-gradient(closest-side,rgba(34,211,238,0.22),transparent)]" />
       <div className="text-[34px] leading-none">{p.country?.flag ?? '📦'}</div>
       <div className="mt-3 line-clamp-1 text-[14px] font-bold">{p.country?.name ?? p.title}</div>
       <div className="text-[11.5px] text-muted">{p.country?.dial_code ?? p.category}</div>

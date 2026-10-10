@@ -3,12 +3,15 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import './index.css'
 import { ApiError } from './lib/api'
 import { ShopProvider } from './lib/shop'
+import { installGlobalErrorReporting } from './lib/errors'
 import { initTelegram } from './lib/telegram'
 
+installGlobalErrorReporting()
 initTelegram()
 
 const queryClient = new QueryClient({
@@ -23,6 +26,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ToastProvider>
@@ -32,5 +36,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 )

@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               initial={{ opacity: 0, y: -24, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -16, scale: 0.95 }}
-              className="glass pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl bg-surface/80 px-4 py-3 text-sm font-medium shadow-2xl"
+              className="glass pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl bg-surface/95 px-4 py-3 text-sm font-medium shadow-2xl"
             >
               {t.kind === 'success' && <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />}
               {t.kind === 'error' && <AlertTriangle className="h-5 w-5 shrink-0 text-danger" />}

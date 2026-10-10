@@ -223,7 +223,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
       {step === 'success' && order && (
         <motion.div className="fade-in space-y-4 py-2 text-center">
           <div className="relative mx-auto grid h-20 w-20 place-items-center">
-            <div className="absolute inset-0 animate-ping rounded-full bg-success/20" />
+            <div className="absolute inset-0 hidden rounded-full bg-success/20" />
             <div className="relative grid h-20 w-20 place-items-center rounded-full bg-success/15 text-success ring-1 ring-success/30">
               <CheckCircle2 className="h-10 w-10" />
             </div>

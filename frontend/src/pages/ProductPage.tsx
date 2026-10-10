@@ -25,8 +25,8 @@ export default function ProductPage() {
         <ArrowLeft className="h-4 w-4" /> Назад
       </button>
       <motion.div className="fade-in relative overflow-hidden rounded-[32px] bg-brand-soft p-6 text-center ring-1 ring-white/10">
-        <div className="pointer-events-none absolute left-1/2 top-6 h-40 w-40 -translate-x-1/2 rounded-full bg-primary/30 blur-3xl" />
-        <div className="relative mx-auto grid h-28 w-28 animate-float place-items-center rounded-[32px] bg-white/[0.06] text-[64px] ring-1 ring-white/15 backdrop-blur">
+        <div className="pointer-events-none absolute left-1/2 top-6 h-40 w-40 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.60),transparent)]" />
+        <div className="relative mx-auto grid h-28 w-28 place-items-center rounded-[32px] bg-white/[0.06] text-[64px] ring-1 ring-white/15">
           {p.country?.flag ?? '📦'}
         </div>
         <h1 className="relative mt-5 font-display text-2xl font-bold">{p.title}</h1>

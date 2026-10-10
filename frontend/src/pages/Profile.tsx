@@ -23,7 +23,7 @@ export default function Profile() {
   return (
     <div className="space-y-5">
       <motion.div className="fade-in relative overflow-hidden rounded-[32px] bg-brand-soft p-5 text-center ring-1 ring-white/10">
-        <div className="pointer-events-none absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 rounded-full bg-primary/30 blur-3xl" />
+        <div className="pointer-events-none absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.60),transparent)]" />
         <div className="relative mx-auto w-fit"><Avatar me={me} size={84} /></div>
         <div className="relative mt-3 font-display text-xl font-bold">{[me.first_name, me.last_name].filter(Boolean).join(' ') || 'Пользователь'}</div>
         {me.username && <div className="relative text-sm text-muted">@{me.username}</div>}
@@ -37,7 +37,7 @@ export default function Profile() {
       </motion.div>
 
       <div className="card relative overflow-hidden p-5">
-        <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-secondary/15 blur-3xl" />
+        <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-[radial-gradient(closest-side,rgba(34,211,238,0.33),transparent)]" />
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[12px] font-semibold uppercase tracking-wider text-muted">Баланс</div>

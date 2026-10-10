@@ -22,7 +22,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
           <motion.div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/70"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -44,7 +44,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
             style={{ paddingBottom: 'calc(var(--safe-bottom) + 20px)' }}
           >
             <div
-              className="sticky top-0 z-10 touch-none bg-surface/95 px-5 pb-3 pt-3 backdrop-blur"
+              className="sticky top-0 z-10 touch-none bg-surface px-5 pb-3 pt-3"
               onPointerDown={(e) => controls.start(e)}
             >
               <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-white/15" />

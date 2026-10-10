@@ -25,6 +25,9 @@ def setup_logging() -> None:
         level=get_settings().log_level.upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # httpx logs full request URLs at INFO — Bot API URLs contain the bot token.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 async def _expiry_loop() -> None:

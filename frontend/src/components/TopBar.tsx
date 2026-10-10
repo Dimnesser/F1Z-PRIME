@@ -30,7 +30,7 @@ export function TopBar() {
       <motion.div
         className="fade-in glass relative overflow-hidden rounded-[28px] p-4"
       >
-        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-secondary/15 blur-3xl" />
+        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(closest-side,rgba(34,211,238,0.33),transparent)]" />
         <div className="text-[13px] text-muted">{greeting()},</div>
         <div className="font-display text-xl font-bold">
           {isLoading ? <Skeleton className="mt-1 h-6 w-32" /> : `${me?.first_name || me?.username || 'гость'} 👋`}

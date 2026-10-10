@@ -44,6 +44,9 @@ async def setup_bot(bot: Bot) -> None:
 async def main() -> None:
     s = get_settings()
     logging.basicConfig(level=s.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # httpx logs full request URLs at INFO — Bot API URLs contain the bot token.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     if not s.bot_token:
         raise SystemExit("BOT_TOKEN is not set")
     bot = Bot(s.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))

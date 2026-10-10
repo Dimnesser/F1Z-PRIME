@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+import logging
+import time
+from collections import defaultdict, deque
+
+from fastapi import APIRouter, HTTPException, Query, Request, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -46,6 +51,34 @@ from app.services import telegram
 from app.services.common import utcnow
 
 router = APIRouter(prefix="/api", tags=["miniapp"])
+client_log = logging.getLogger("f1z.client")
+_client_errors: dict[str, deque[float]] = defaultdict(deque)
+
+
+class ClientError(BaseModel):
+    message: str = Field(max_length=500)
+    stack: str = Field(default="", max_length=2000)
+    path: str = Field(default="", max_length=200)
+    ua: str = Field(default="", max_length=300)
+    kind: str = Field(default="error", max_length=32)
+
+
+@router.post("/client-errors", status_code=204, response_class=Response)
+async def report_client_error(body: ClientError, request: Request) -> Response:
+    """Mini App runtime errors -> server log (no auth, rate limited, size limited)."""
+    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0]
+    hits = _client_errors[ip]
+    now = time.monotonic()
+    while hits and now - hits[0] > 600:
+        hits.popleft()
+    if len(hits) >= 20:
+        return Response(status_code=204)
+    hits.append(now)
+    client_log.warning(
+        "client %s on %s: %s | ua=%s | stack=%s",
+        body.kind, body.path, body.message, body.ua, body.stack.replace("\n", " <- ")[:2000],
+    )
+    return Response(status_code=204)
 
 CATEGORY_META = {
     "numbers": {"title": "Номера по странам", "icon": "globe"},

@@ -26,7 +26,7 @@ export default function NumberPage() {
       </button>
       <motion.div className="fade-in rounded-[32px] bg-brand p-[1.5px] shadow-glow">
         <div className="relative overflow-hidden rounded-[31px] bg-[radial-gradient(120%_120%_at_100%_0%,#2b1a5c_0%,#13112a_50%,#0a1720_100%)] p-6">
-          <div className="pointer-events-none absolute -left-10 -top-10 h-44 w-44 animate-spin-slow rounded-full bg-[conic-gradient(rgba(139,92,246,0.45),rgba(34,211,238,0.35),transparent)] blur-2xl" />
+          <div className="pointer-events-none absolute -left-10 -top-10 h-52 w-52 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.42),rgba(34,211,238,0.16)_55%,transparent)]" />
           <div className="relative flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em]">
               <Gem className="h-3.5 w-3.5" /> {n.title}

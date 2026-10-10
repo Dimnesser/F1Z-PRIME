@@ -15,13 +15,23 @@ class TelegramError(Exception):
     pass
 
 
+def redact(text: object) -> str:
+    """Remove the bot token from any text that may end up in logs."""
+    out = str(text)
+    token = get_settings().bot_token
+    return out.replace(token, "***") if token else out
+
+
 async def call(method: str, payload: dict[str, Any], timeout: float = 10.0) -> Any:
     token = get_settings().bot_token
     if not token:
         raise TelegramError("BOT_TOKEN is not configured")
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(f"https://api.telegram.org/bot{token}/{method}", json=payload)
-    data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(f"https://api.telegram.org/bot{token}/{method}", json=payload)
+        data = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise TelegramError(redact(exc)) from None
     if not data.get("ok"):
         raise TelegramError(data.get("description", "Telegram API error"))
     return data["result"]
@@ -49,7 +59,7 @@ async def notify(chat_id: int, text: str) -> None:
     try:
         await call("sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
     except Exception as exc:  # noqa: BLE001
-        log.warning("notify %s failed: %s", chat_id, exc)
+        log.warning("notify %s failed: %s", chat_id, redact(exc))
 
 
 async def notify_admins(text: str) -> None:

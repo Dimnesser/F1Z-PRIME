@@ -30,7 +30,7 @@ body::before {
 
 @layer components {
   .glass {
-    @apply border border-white/[0.07] bg-white/[0.035] backdrop-blur-xl;
+    @apply border border-white/[0.07] bg-[#15151f]/90;
   }
   .card {
     @apply rounded-3xl border border-white/[0.06] bg-card shadow-card;

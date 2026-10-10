@@ -29,8 +29,8 @@ export default function Home() {
         className="fade-in relative overflow-hidden rounded-[30px] bg-brand p-[1.5px] shadow-glow"
       >
         <div className="relative overflow-hidden rounded-[29px] bg-[radial-gradient(120%_120%_at_0%_0%,#2a1858_0%,#120f2a_45%,#0b1a24_100%)] p-5">
-          <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 animate-spin-slow rounded-full bg-[conic-gradient(from_0deg,rgba(139,92,246,0.5),rgba(34,211,238,0.4),transparent,rgba(139,92,246,0.5))] opacity-60 blur-2xl" />
-          <div className="absolute right-4 top-5 animate-float">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.45),rgba(34,211,238,0.18)_55%,transparent)]" />
+          <div className="absolute right-4 top-5">
             <div className="h-20 w-20 rounded-full bg-brand p-[2px] shadow-glow-cyan">
               <img src="/brand.jpg" alt="" className="h-full w-full rounded-full object-cover" />
             </div>
@@ -64,7 +64,7 @@ export default function Home() {
                 onClick={() => navigate(c.slug === 'premium' ? '/numbers' : '/catalog')}
                 className="card relative overflow-hidden p-4 text-left"
               >
-                <div className="pointer-events-none absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-primary/15 blur-2xl" />
+                <div className="pointer-events-none absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.33),transparent)]" />
                 {(() => {
                   const Icon = CAT_ICON[c.icon] ?? Sparkles
                   return (

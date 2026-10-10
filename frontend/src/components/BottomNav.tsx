@@ -17,7 +17,7 @@ export function BottomNav() {
   const active = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to))
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3" style={{ paddingBottom: 'calc(var(--safe-bottom) + 10px)' }}>
-      <div className="glass flex w-full max-w-md items-center justify-between rounded-[26px] bg-surface/75 p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]">
+      <div className="glass flex w-full max-w-md items-center justify-between rounded-[26px] bg-surface/95 p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]">
         {ITEMS.map(({ to, label, icon: Icon }) => {
           const isActive = active(to)
           return (

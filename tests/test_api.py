@@ -333,3 +333,26 @@ async def test_expire_orders():
         assert (await s.get(Product, product.id, populate_existing=True)).stock == stock
         assert (await s.get(Order, order.id)).status.value == "expired"
     assert Decimal("1") == 1
+
+
+async def test_client_error_report_is_logged(client, caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="f1z.client"):
+        r = await client.post("/api/client-errors", json={"message": "boom", "stack": "a\nb", "path": "/catalog", "kind": "react"})
+    assert r.status_code == 204
+    assert any("boom" in rec.getMessage() and "/catalog" in rec.getMessage() for rec in caplog.records)
+    r = await client.post("/api/client-errors", json={"message": "x" * 5000})
+    assert r.status_code == 422  # size limited
+
+
+def test_bot_token_never_logged():
+    import logging
+
+    from app.main import setup_logging
+    from app.services.telegram import redact
+    from tests.conftest import BOT_TOKEN
+
+    setup_logging()
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+    assert BOT_TOKEN not in redact(f"POST https://api.telegram.org/bot{BOT_TOKEN}/sendMessage failed")
