@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     bot_token: str = ""
     bot_username: str = ""
     webapp_url: str = "http://localhost:5173"
+    owner_telegram_id: int = 5102543442  # project owner, always receives admin notifications
     admin_telegram_ids: str = ""  # comma separated ids that receive notifications
 
     secret_key: str = "change-me-please-use-a-long-random-string"
@@ -65,7 +66,10 @@ class Settings(BaseSettings):
 
     @property
     def admin_ids(self) -> list[int]:
-        return [int(x) for x in self.admin_telegram_ids.replace(" ", "").split(",") if x]
+        ids = [int(x) for x in self.admin_telegram_ids.replace(" ", "").split(",") if x]
+        if self.owner_telegram_id and self.owner_telegram_id not in ids:
+            ids.insert(0, self.owner_telegram_id)
+        return ids
 
     @property
     def cors_list(self) -> list[str]:
