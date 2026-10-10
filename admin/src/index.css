@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body, #root { background: #09090F; min-height: 100%; }
+body { @apply font-sans text-ink antialiased; }
+body::before {
+  content: ''; position: fixed; inset: -10% -10% auto 30%; height: 480px; pointer-events: none; z-index: 0;
+  background: radial-gradient(40% 50% at 30% 30%, rgba(139,92,246,0.16), transparent 70%), radial-gradient(30% 40% at 85% 10%, rgba(34,211,238,0.10), transparent 70%);
+}
+
+@layer components {
+  .card { @apply rounded-3xl border border-white/[0.06] bg-card shadow-card; }
+  .glass { @apply border border-white/[0.07] bg-white/[0.035] backdrop-blur-xl; }
+  .text-gradient { @apply bg-brand bg-clip-text text-transparent; }
+  .input { @apply h-11 w-full rounded-xl border border-white/[0.08] bg-surface px-3.5 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-primary/60 focus:ring-4 focus:ring-primary/15; }
+  textarea.input { @apply h-auto py-3; }
+  .label { @apply mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-muted; }
+  .th { @apply whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-muted; }
+  .td { @apply whitespace-nowrap px-4 py-3 text-sm; }
+}
