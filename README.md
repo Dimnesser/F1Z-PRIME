@@ -122,7 +122,7 @@ TEST_DATABASE_URL=postgresql+asyncpg://f1z:f1z@localhost:5432/f1z_test pytest -q
 | `DEV_MODE` | тестовый пользователь и тестовые платежи (выключается в production) |
 | `BOT_TOKEN`, `BOT_USERNAME` | бот из @BotFather |
 | `WEBAPP_URL` | https-адрес Mini App (для кнопок бота) |
-| `SITE_ADDRESS`, `ACME_EMAIL` | домен и email для Let's Encrypt (Caddy) |
+| `SITE_ADDRESS` | домен для HTTPS (Caddy сам получает сертификат Let's Encrypt) |
 | `CORS_ORIGINS` | разрешённые origin через запятую |
 | `POSTGRES_DB/USER/PASSWORD` | база данных (`DATABASE_URL` собирается в compose) |
 | `SECRET_KEY` | подпись JWT админки, ≥ 32 символов |
