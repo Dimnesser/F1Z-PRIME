@@ -127,6 +127,7 @@ TEST_DATABASE_URL=postgresql+asyncpg://f1z:f1z@localhost:5432/f1z_test pytest -q
 | `POSTGRES_DB/USER/PASSWORD` | база данных (`DATABASE_URL` собирается в compose) |
 | `SECRET_KEY` | подпись JWT админки, ≥ 32 символов |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` / `ADMIN_PASSWORD` | вход в админку |
+| `OWNER_TELEGRAM_ID` | Telegram ID владельца (по умолчанию `5102543442`), всегда получает уведомления |
 | `ADMIN_TELEGRAM_IDS` | кому бот шлёт уведомления о заказах/платежах/обращениях |
 | `INIT_DATA_TTL_SECONDS`, `ORDER_TTL_MINUTES`, `MAX_PENDING_ORDERS` | безопасность и резервы |
 | `SEED_ON_START`, `SEED_DEMO_PREMIUM` | seed при старте, демо красивые номера |
