@@ -277,7 +277,7 @@ async def list_jobs(
     return [
         {"id": j.id, "kind": j.kind, "status": j.status, "attempts": j.attempts, "max_attempts": j.max_attempts,
          "last_error": j.last_error, "run_at": j.run_at.isoformat(), "created_at": j.created_at.isoformat(),
-         "order_id": (j.payload or {}).get("order_id")}
+         "order_id": (j.payload or {}).get("order_id"), "dedupe_key": j.dedupe_key}
         for j in rows
     ]
 

@@ -958,6 +958,8 @@ async def export_orders(
 
 @router.get("/orders/{order_id}")
 async def order_detail(order_id: int, admin: P("orders.view"), session: SessionDep) -> dict:
+    from app.models import Incident, InventoryItem, Job, Refund
+
     order = await session.get(Order, order_id)
     if order is None:
         raise HTTPException(404, "Заказ не найден")
@@ -967,14 +969,89 @@ async def order_detail(order_id: int, admin: P("orders.view"), session: SessionD
     events = (
         await session.scalars(select(OrderEvent).where(OrderEvent.order_id == order_id).order_by(OrderEvent.id))
     ).all()
+    refund_rows = (await session.scalars(select(Refund).where(Refund.order_id == order_id).order_by(Refund.id))).all()
+    incident_rows = (
+        await session.scalars(select(Incident).where(Incident.order_id == order_id).order_by(Incident.id))
+    ).all()
+    job_rows = (
+        await session.scalars(
+            select(Job).where(or_(Job.dedupe_key == f"fulfill:{order_id}", Job.dedupe_key.like(f"notify:{order_id}:%")))
+            .order_by(Job.id)
+        )
+    ).all()
+    units = (
+        await session.scalars(select(InventoryItem).where(InventoryItem.order_id == order_id).order_by(InventoryItem.id))
+    ).all()
+    tickets = (
+        await session.scalars(select(SupportTicket).where(SupportTicket.order_id == order_id).order_by(SupportTicket.id))
+    ).unique().all()
+    review = any(p.status == PaymentStatus.awaiting_confirmation for p in payments)
+
+    # timeline from real server records only (status changes, payments, refunds, notifications, incidents)
+    timeline: list[dict] = []
+    for e in events:
+        timeline.append({"at": e.created_at, "kind": "status", "title": order_service.STATUS_LABELS[e.to_status],
+                         "note": e.note, "actor": e.actor})
+    for p in payments:
+        timeline.append({"at": p.created_at, "kind": "payment", "title": f"Платёж #{p.id} создан ({p.method.value})",
+                         "note": "", "actor": "customer"})
+        if p.confirmed_at:
+            timeline.append({"at": p.confirmed_at, "kind": "payment", "title": f"Платёж #{p.id} подтверждён",
+                             "note": "", "actor": p.confirmed_by or ""})
+    for r in refund_rows:
+        timeline.append({"at": r.created_at, "kind": "refund", "title": f"Возврат {r.amount} грн ({r.method}) — {r.status}",
+                         "note": r.reason, "actor": r.requested_by})
+    for j in job_rows:
+        if j.kind == "tg_message":
+            event = (j.dedupe_key or "").split(":", 2)[-1]
+            title = notifications_title(event)
+            state = {"done": "доставлено", "pending": "в очереди", "running": "отправляется", "dead": "не доставлено"}.get(j.status, j.status)
+            timeline.append({"at": j.finished_at or j.created_at, "kind": "notification", "title": f"Уведомление «{title}»: {state}",
+                             "note": j.last_error or "", "actor": "worker"})
+        elif j.status == "dead":
+            timeline.append({"at": j.finished_at or j.created_at, "kind": "error", "title": "Автовыдача остановлена после всех попыток",
+                             "note": j.last_error or "", "actor": "worker"})
+    for i in incident_rows:
+        timeline.append({"at": i.created_at, "kind": "incident", "title": i.title, "note": i.status, "actor": "system"})
+    timeline.sort(key=lambda x: x["at"])
+
+    fulfill_job = next((j for j in job_rows if j.kind == "fulfill"), None)
+    payment = next((p for p in reversed(payments) if p.status == PaymentStatus.confirmed), None)
     return {
         "order": AdminOrderOut.model_validate(order, from_attributes=True),
+        "stage": order_service.order_stage(order, payment_review=review),
+        "stage_label": order_service.STAGE_LABELS[order_service.order_stage(order, payment_review=review)],
         "payments": [AdminPaymentOut.model_validate(p, from_attributes=True) for p in payments],
         "events": [OrderEventOut.model_validate(e, from_attributes=True) for e in events],
+        "timeline": timeline,
         "allowed": sorted(x.value for x in order_service.ALLOWED_TRANSITIONS[order.status]),
-        "product": {"id": order.product.id, "category": order.product.category, "delivery_note": order.product.delivery_note}
+        "product": {"id": order.product.id, "category": order.product.category, "delivery_note": order.product.delivery_note,
+                    "fulfillment_mode": order.product.fulfillment_mode, "uses_inventory": order.product.uses_inventory}
         if order.product else None,
+        "fulfillment": {
+            "status": order.fulfillment_status, "attempts": order.fulfillment_attempts, "error": order.fulfillment_error,
+            "delivered_at": order.delivered_at,
+            "job": {"status": fulfill_job.status, "attempts": fulfill_job.attempts, "run_at": fulfill_job.run_at,
+                    "last_error": fulfill_job.last_error} if fulfill_job else None,
+        },
+        # staff never see decrypted secrets: masked labels only
+        "units": [{"id": u.id, "label": u.label, "status": u.status} for u in units],
+        "refunds": [{"id": r.id, "amount": r.amount, "method": r.method, "status": r.status, "reason": r.reason,
+                     "requested_by": r.requested_by, "error": r.error, "created_at": r.created_at,
+                     "completed_at": r.completed_at} for r in refund_rows],
+        "refund_methods": refunds.available_methods(order, payment)
+        if admin.can("refunds.create") and order.status in PAID_STATUSES else [],
+        "incidents": [{"id": i.id, "kind": i.kind, "title": i.title, "status": i.status, "severity": i.severity,
+                       "created_at": i.created_at} for i in incident_rows],
+        "tickets": [{"id": t.id, "subject": t.subject, "status": t.status.value, "priority": t.priority} for t in tickets],
     }
+
+
+def notifications_title(event: str) -> str:
+    from app.services import notifications
+
+    base = event.split(":", 1)[0]
+    return notifications.TEMPLATES[base][1] if base in notifications.TEMPLATES else base
 
 
 STATUS_PERMISSION = {
