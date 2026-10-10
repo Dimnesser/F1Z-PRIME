@@ -73,3 +73,28 @@
 - Deployed to vps4: DEPLOYED_COMMIT `97a99e9` (feature in `0e09c04` + CSP quoting). Backups:
   `/root/f1z-backup/db-20261010-174445.sql.gz`, `db-20261010-174755.sql.gz` + code archives. Migration 0003 applied,
   data kept (users 3, orders 3, products 8); owner token exchange OK, non-admin 403, forged 401, bot polling, no API errors.
+
+## Stage 6 — Full order automation + extended admin (IN PROGRESS, not deployed yet)
+Branch `ccr-27c43927-xio4pi`. Live on vps4 is still `97a99e9`.
+
+Done (backend, committed, 106 tests pass):
+- Migrations 0004 (inventory units, stock movements, jobs, task runs, incidents, refunds, templates, order
+  public_id / fulfillment fields, ticket order/category/priority) and 0005 (roles, admin RBAC columns,
+  approvals, staff inbox, admin prefs). Additive only; existing data mapped.
+- Worker process `python -m app.worker` (docker-compose service `worker`): durable job queue (SKIP LOCKED,
+  backoff 30s·2^n ≤ 1h, dead letter), periodic tasks (reservations expiry, stuck orders, payment checks,
+  low stock, outbox, backups, cleanup, daily summary), heartbeat. Bot heartbeat too.
+- Fulfillment per product: auto (encrypted units AES-GCM / delivery text) / manual / review; fast path
+  `run_now` after payment + durable job fallback; failure → incident + manual queue; admin retry/handover.
+- Refunds: balance / Stars (refundStarPayment via worker) / manual (operator confirms); no double refund.
+- Notifications from editable templates (customer + staff), dedupe per order+event, quiet hours.
+- RBAC: permission catalog, 8 built-in roles + custom roles, extra/denied permissions, limits,
+  two-person approvals, expiry, revoke sessions, no self-escalation, owner untouchable; staff inbox, prefs.
+- Mini App API: order `stage`, `delivered_items` only after delivery, one-tap support ticket per order.
+- Admin API: inventory units (masked), stock history/adjust with reason, order timeline from server records.
+
+Remaining: Stage C (promo codes, product extensions, rules engine WHEN→IF→THEN), Stage D (admin UI for all
+of this + Mini App UI), Stage E (deploy via deploy key with backups, verify).
+
+Continue with: `cd /home/user/F1Z-PRIME && service postgresql start && python3 -m pytest -q` then
+implement the remaining stages listed above (see task list in this file).
