@@ -29,7 +29,9 @@ export default function Ticket() {
     onError: (e) => toast((e as Error).message, 'error'),
   })
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [t?.messages.length])
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [t?.messages.length])
 
   if (isLoading || !t) return <Skeleton className="h-80 rounded-3xl" />
   return (

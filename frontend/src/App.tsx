@@ -33,7 +33,11 @@ function useStartParam() {
 export default function App() {
   const location = useLocation()
   useStartParam()
-  useEffect(() => window.scrollTo({ top: 0 }), [location.pathname])
+  // Braces matter: in newer Chrome (153+) scroll methods return a Promise, and an arrow
+  // expression body would hand it to React as the effect cleanup -> "i is not a function".
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [location.pathname])
   const { error } = useMe()
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return <AuthGate message={error.message} />
 
