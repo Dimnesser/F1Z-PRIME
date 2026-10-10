@@ -1,0 +1,357 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
+
+from app.api.deps import SessionDep, UserDep
+from app.config import get_settings
+from app.models import (
+    BalanceTransaction,
+    Country,
+    Order,
+    Payment,
+    PaymentMethod,
+    PremiumNumber,
+    PremiumStatus,
+    Product,
+    ProductStatus,
+    SupportMessage,
+    SupportTicket,
+    TicketStatus,
+)
+from app.schemas import (
+    CountryCatalogOut,
+    ManualSubmit,
+    MessageCreate,
+    OrderCreate,
+    OrderDetailOut,
+    OrderOut,
+    PaymentOut,
+    PayRequest,
+    PayResponse,
+    PremiumNumberOut,
+    ProductOut,
+    TicketCreate,
+    TicketDetailOut,
+    TicketOut,
+    TopupRequest,
+    TransactionOut,
+    UserOut,
+)
+from app.services import orders as order_service
+from app.services import payments as payment_service
+from app.services import settings as settings_service
+from app.services import telegram
+from app.services.common import utcnow
+
+router = APIRouter(prefix="/api", tags=["miniapp"])
+
+CATEGORY_META = {
+    "numbers": {"title": "Номера по странам", "icon": "globe"},
+    "premium": {"title": "Красивые номера", "icon": "gem"},
+    "digital": {"title": "Цифровые товары", "icon": "sparkles"},
+    "services": {"title": "Сервисы", "icon": "zap"},
+}
+
+
+@router.get("/config")
+async def public_config(session: SessionDep) -> dict:
+    s = get_settings()
+    values = await settings_service.get_all(session, public_only=True)
+    methods = ["balance"]
+    if values.get("stars_enabled", "").lower() == "true" and s.bot_token:
+        methods.append("stars")
+    if values.get("manual_enabled", "").lower() == "true":
+        methods.append("manual")
+    if s.dev_mode and not s.is_production:
+        methods.append("test")
+    return {
+        "settings": values,
+        "dev_mode": s.dev_mode and not s.is_production,
+        "bot_username": s.bot_username,
+        "payment_methods": methods,
+    }
+
+
+async def _country_catalog(session: SessionDep) -> list[CountryCatalogOut]:
+    countries = (
+        await session.scalars(select(Country).where(Country.is_active).order_by(Country.sort_order, Country.name))
+    ).all()
+    products = (
+        await session.scalars(
+            select(Product)
+            .where(Product.status == ProductStatus.active, Product.category == "numbers", Product.country_id.is_not(None))
+            .order_by(Product.price)
+        )
+    ).all()
+    by_country: dict[int, list[Product]] = {}
+    for p in products:
+        by_country.setdefault(p.country_id, []).append(p)  # type: ignore[arg-type]
+    out = []
+    for c in countries:
+        items = by_country.get(c.id, [])
+        in_stock = [p for p in items if p.stock > 0]
+        main = in_stock[0] if in_stock else (items[0] if items else None)
+        out.append(
+            CountryCatalogOut(
+                **CountryCatalogOut.model_validate(c, from_attributes=True).model_dump(
+                    exclude={"product_id", "price", "stock"}
+                ),
+                product_id=main.id if main else None,
+                price=main.price if main else None,
+                stock=sum(p.stock for p in items),
+            )
+        )
+    return out
+
+
+@router.get("/countries", response_model=list[CountryCatalogOut])
+async def countries(session: SessionDep) -> list[CountryCatalogOut]:
+    return await _country_catalog(session)
+
+
+@router.get("/categories")
+async def categories(session: SessionDep) -> list[dict]:
+    rows = (
+        await session.execute(
+            select(Product.category, func.count(Product.id), func.coalesce(func.sum(Product.stock), 0))
+            .where(Product.status == ProductStatus.active)
+            .group_by(Product.category)
+        )
+    ).all()
+    premium = await session.scalar(
+        select(func.count(PremiumNumber.id)).where(PremiumNumber.status == PremiumStatus.available)
+    )
+    result = [
+        {"slug": cat, "count": cnt, "stock": int(stock), **CATEGORY_META.get(cat, {"title": cat.title(), "icon": "box"})}
+        for cat, cnt, stock in rows
+    ]
+    result.append({"slug": "premium", "count": premium or 0, "stock": premium or 0, **CATEGORY_META["premium"]})
+    return result
+
+
+@router.get("/products", response_model=list[ProductOut])
+async def products(
+    session: SessionDep,
+    country_id: int | None = None,
+    category: str | None = Query(default=None, max_length=32),
+    popular: bool | None = None,
+) -> list[Product]:
+    stmt = select(Product).where(Product.status == ProductStatus.active)
+    if country_id:
+        stmt = stmt.where(Product.country_id == country_id)
+    if category:
+        stmt = stmt.where(Product.category == category)
+    if popular:
+        stmt = stmt.where(Product.is_popular)
+    return list((await session.scalars(stmt.order_by(Product.sort_order, Product.id))).all())
+
+
+@router.get("/products/{product_id}", response_model=ProductOut)
+async def product_detail(product_id: int, session: SessionDep) -> Product:
+    product = await session.get(Product, product_id)
+    if product is None or product.status != ProductStatus.active:
+        raise HTTPException(404, "Товар не найден")
+    return product
+
+
+@router.get("/premium-numbers", response_model=list[PremiumNumberOut])
+async def premium_numbers(
+    session: SessionDep, country_id: int | None = None, tier: str | None = Query(default=None, max_length=16)
+) -> list[PremiumNumber]:
+    stmt = select(PremiumNumber).where(PremiumNumber.status == PremiumStatus.available)
+    if country_id:
+        stmt = stmt.where(PremiumNumber.country_id == country_id)
+    if tier:
+        stmt = stmt.where(PremiumNumber.tier == tier)
+    return list((await session.scalars(stmt.order_by(PremiumNumber.price.desc()))).all())
+
+
+@router.get("/premium-numbers/{number_id}", response_model=PremiumNumberOut)
+async def premium_detail(number_id: int, session: SessionDep) -> PremiumNumber:
+    number = await session.get(PremiumNumber, number_id)
+    if number is None or number.status == PremiumStatus.hidden:
+        raise HTTPException(404, "Номер не найден")
+    return number
+
+
+# ------------------------------------------------------------------ profile
+
+
+@router.get("/me", response_model=UserOut)
+async def me(user: UserDep) -> object:
+    return user
+
+
+@router.get("/me/transactions", response_model=list[TransactionOut])
+async def my_transactions(user: UserDep, session: SessionDep, limit: int = Query(50, ge=1, le=200)) -> list:
+    stmt = (
+        select(BalanceTransaction)
+        .where(BalanceTransaction.user_id == user.id)
+        .order_by(BalanceTransaction.id.desc())
+        .limit(limit)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
+@router.get("/me/payments", response_model=list[PaymentOut])
+async def my_payments(user: UserDep, session: SessionDep) -> list:
+    stmt = select(Payment).where(Payment.user_id == user.id).order_by(Payment.id.desc()).limit(50)
+    return list((await session.scalars(stmt)).all())
+
+
+# ------------------------------------------------------------------- orders
+
+
+@router.post("/orders", response_model=OrderOut, status_code=201)
+async def create_order(body: OrderCreate, user: UserDep, session: SessionDep) -> Order:
+    order, created = await order_service.create_order(
+        session,
+        user,
+        idempotency_key=body.idempotency_key,
+        product_id=body.product_id,
+        premium_number_id=body.premium_number_id,
+        quantity=body.quantity,
+    )
+    await session.commit()
+    if created:
+        await telegram.notify_admins(
+            f"🆕 Новый заказ #{order.id}\n{order.item_title} × {order.quantity}\nСумма: {order.total} грн"
+        )
+    return order
+
+
+@router.get("/orders", response_model=list[OrderOut])
+async def my_orders(user: UserDep, session: SessionDep) -> list:
+    stmt = select(Order).where(Order.user_id == user.id).order_by(Order.id.desc()).limit(100)
+    return list((await session.scalars(stmt)).unique().all())
+
+
+async def _order_detail(session: SessionDep, order: Order) -> OrderDetailOut:
+    payments = (await session.scalars(select(Payment).where(Payment.order_id == order.id).order_by(Payment.id))).all()
+    data = OrderDetailOut.model_validate(order, from_attributes=True)
+    data.payments = [PaymentOut.model_validate(p, from_attributes=True) for p in payments]
+    if order.product and order.status.value in ("paid", "processing", "completed"):
+        data.delivery_note = order.product.delivery_note or None
+    return data
+
+
+@router.get("/orders/{order_id}", response_model=OrderDetailOut)
+async def order_detail(order_id: int, user: UserDep, session: SessionDep) -> OrderDetailOut:
+    order = await session.get(Order, order_id)
+    if order is None or order.user_id != user.id:
+        raise HTTPException(404, "Заказ не найден")
+    return await _order_detail(session, order)
+
+
+@router.post("/orders/{order_id}/pay", response_model=PayResponse)
+async def pay_order(order_id: int, body: PayRequest, user: UserDep, session: SessionDep) -> PayResponse:
+    result = await payment_service.start_order_payment(session, user, order_id, body.method)
+    await session.commit()
+    order = await session.get(Order, order_id, populate_existing=True)
+    if body.method in (PaymentMethod.balance, PaymentMethod.test) and order is not None:
+        await telegram.notify(user.telegram_id, f"✅ Заказ #{order.id} оплачен. Статус: {order.status.value}")
+        await telegram.notify_admins(f"💰 Заказ #{order.id} оплачен ({body.method.value}) — {order.total} грн")
+    return PayResponse(
+        payment=PaymentOut.model_validate(result.payment, from_attributes=True),
+        order=OrderOut.model_validate(order, from_attributes=True) if order else None,
+        invoice_link=result.invoice_link,
+        instructions=result.instructions,
+    )
+
+
+@router.post("/orders/{order_id}/cancel", response_model=OrderOut)
+async def cancel_order(order_id: int, user: UserDep, session: SessionDep) -> Order:
+    order = await order_service.cancel_by_user(session, user, order_id)
+    await session.commit()
+    return order
+
+
+# ---------------------------------------------------------------- payments
+
+
+@router.post("/balance/topup", response_model=PayResponse)
+async def topup(body: TopupRequest, user: UserDep, session: SessionDep) -> PayResponse:
+    result = await payment_service.start_topup(session, user, body.amount, body.method)
+    await session.commit()
+    return PayResponse(
+        payment=PaymentOut.model_validate(result.payment, from_attributes=True),
+        invoice_link=result.invoice_link,
+        instructions=result.instructions,
+    )
+
+
+@router.get("/payments/{payment_id}", response_model=PaymentOut)
+async def payment_status(payment_id: int, user: UserDep, session: SessionDep) -> Payment:
+    payment = await session.get(Payment, payment_id)
+    if payment is None or payment.user_id != user.id:
+        raise HTTPException(404, "Платёж не найден")
+    return payment
+
+
+@router.post("/payments/{payment_id}/submit", response_model=PaymentOut)
+async def submit_manual(payment_id: int, body: ManualSubmit, user: UserDep, session: SessionDep) -> Payment:
+    payment = await payment_service.submit_manual(session, user, payment_id, body.comment)
+    await session.commit()
+    await telegram.notify_admins(
+        f"🧾 Ручной платёж #{payment.id} ожидает проверки: {payment.amount} грн\n"
+        f"Пользователь: {user.telegram_id} @{user.username or '-'}\nКомментарий: {body.comment or '-'}"
+    )
+    return payment
+
+
+# ----------------------------------------------------------------- support
+
+
+@router.get("/support/tickets", response_model=list[TicketOut])
+async def my_tickets(user: UserDep, session: SessionDep) -> list:
+    stmt = select(SupportTicket).where(SupportTicket.user_id == user.id).order_by(SupportTicket.updated_at.desc())
+    return list((await session.scalars(stmt)).unique().all())
+
+
+@router.post("/support/tickets", response_model=TicketDetailOut, status_code=201)
+async def create_ticket(body: TicketCreate, user: UserDep, session: SessionDep) -> SupportTicket:
+    open_count = await session.scalar(
+        select(func.count(SupportTicket.id)).where(
+            SupportTicket.user_id == user.id, SupportTicket.status != TicketStatus.closed
+        )
+    )
+    if (open_count or 0) >= 5:
+        raise HTTPException(429, "У вас слишком много открытых обращений")
+    ticket = SupportTicket(user_id=user.id, subject=body.subject.strip())
+    ticket.messages.append(SupportMessage(is_admin=False, text=body.text.strip()))
+    session.add(ticket)
+    await session.commit()
+    await telegram.notify_admins(f"🆘 Новое обращение #{ticket.id}: {ticket.subject}\n\n{body.text[:500]}")
+    return await _load_ticket(session, ticket.id, user.id)
+
+
+async def _load_ticket(session: SessionDep, ticket_id: int, user_id: int) -> SupportTicket:
+    ticket = await session.scalar(
+        select(SupportTicket)
+        .options(selectinload(SupportTicket.messages))
+        .where(SupportTicket.id == ticket_id)
+        .execution_options(populate_existing=True)
+    )
+    if ticket is None or ticket.user_id != user_id:
+        raise HTTPException(404, "Обращение не найдено")
+    return ticket
+
+
+@router.get("/support/tickets/{ticket_id}", response_model=TicketDetailOut)
+async def ticket_detail(ticket_id: int, user: UserDep, session: SessionDep) -> SupportTicket:
+    return await _load_ticket(session, ticket_id, user.id)
+
+
+@router.post("/support/tickets/{ticket_id}/messages", response_model=TicketDetailOut)
+async def ticket_reply(ticket_id: int, body: MessageCreate, user: UserDep, session: SessionDep) -> SupportTicket:
+    ticket = await _load_ticket(session, ticket_id, user.id)
+    if ticket.status == TicketStatus.closed:
+        raise HTTPException(409, "Обращение закрыто")
+    session.add(SupportMessage(ticket_id=ticket.id, is_admin=False, text=body.text.strip()))
+    ticket.status = TicketStatus.open
+    ticket.updated_at = utcnow()
+    await session.commit()
+    await telegram.notify_admins(f"💬 Сообщение в обращении #{ticket.id}:\n{body.text[:500]}")
+    return await _load_ticket(session, ticket_id, user.id)
