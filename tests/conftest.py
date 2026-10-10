@@ -74,6 +74,11 @@ async def clean_db():
         await session.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))
         await session.commit()
     await seed(demo=True)
+    from app.api import admin as admin_api
+    from app.api import deps
+
+    deps._admin_writes.clear()  # rate-limit windows are per process; each test starts fresh
+    admin_api._login_attempts.clear()
     yield
     await dispose_engine()
     get_settings.cache_clear()
