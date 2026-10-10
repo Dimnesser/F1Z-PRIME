@@ -17,6 +17,11 @@
 		root * /srv/admin
 		header X-Frame-Options "DENY"
 		header X-Robots-Tag "noindex, nofollow"
+		# hashed bundles are immutable; index.html must always be revalidated so a deploy is picked up
+		@adminassets path /assets/*
+		header @adminassets Cache-Control "public, max-age=31536000, immutable"
+		@adminpage not path /assets/*
+		header @adminpage Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

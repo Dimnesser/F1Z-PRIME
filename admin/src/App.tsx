@@ -1,48 +1,96 @@
-import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { clearChunkReloadFlag, ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
+import { Skeleton } from './components/ui'
 import { api, auth } from './lib/api'
-import Countries from './pages/Countries'
-import Dashboard from './pages/Dashboard'
+import { SessionCtx } from './lib/session'
+import type { Me } from './lib/types'
 import Login from './pages/Login'
-import Orders from './pages/Orders'
-import Payments from './pages/Payments'
-import Premium from './pages/Premium'
-import Products from './pages/Products'
-import Settings from './pages/Settings'
-import Support from './pages/Support'
-import Users from './pages/Users'
+
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Users = lazy(() => import('./pages/Users'))
+const Products = lazy(() => import('./pages/Products'))
+const Premium = lazy(() => import('./pages/Premium'))
+const Countries = lazy(() => import('./pages/Countries'))
+const Finance = lazy(() => import('./pages/Finance'))
+const Support = lazy(() => import('./pages/Support'))
+const Automation = lazy(() => import('./pages/Automation'))
+const Settings = lazy(() => import('./pages/Settings'))
+
+function PageFallback() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-48" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>
+      <Skeleton className="h-72 rounded-2xl" />
+    </div>
+  )
+}
 
 export default function App() {
-  const [admin, setAdmin] = useState<string | null>(null)
+  const [me, setMe] = useState<Me | null>(null)
   const [checking, setChecking] = useState(Boolean(auth.get()))
+  const [counters, setCounters] = useState({ tickets: 0, review: 0 })
+  const location = useLocation()
+
+  useEffect(() => {
+    // the app loaded fine, so a later stale-chunk error may reload once again
+    const t = window.setTimeout(clearChunkReloadFlag, 5000)
+    return () => window.clearTimeout(t)
+  }, [])
 
   useEffect(() => {
     if (auth.get()) {
-      api<{ username: string }>('/me').then((r) => setAdmin(r.username)).catch(() => auth.clear()).finally(() => setChecking(false))
+      api<Me>('/me').then(setMe).catch(() => auth.clear()).finally(() => setChecking(false))
     }
-    const onLogout = () => setAdmin(null)
+    const onLogout = () => setMe(null)
     window.addEventListener('f1z-logout', onLogout)
     return () => window.removeEventListener('f1z-logout', onLogout)
   }, [])
 
-  if (checking) return <div className="grid min-h-screen place-items-center text-muted">Загрузка…</div>
-  if (!admin) return <Login onLogin={setAdmin} />
+  // badge counters for the navigation (open tickets, payments waiting for review)
+  const refreshCounters = useCallback(async () => {
+    try {
+      const d = await api<{ open_tickets: number; pending_payments: number }>('/dashboard?days=7')
+      setCounters({ tickets: d.open_tickets, review: d.pending_payments })
+    } catch { /* not critical */ }
+  }, [])
+  useEffect(() => {
+    if (!me) return
+    void refreshCounters()
+    const t = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshCounters()
+    }, 60_000)
+    return () => window.clearInterval(t)
+  }, [me, refreshCounters])
 
+  if (checking) return <div className="grid min-h-screen place-items-center text-sm text-muted">Загрузка…</div>
+  if (!me) return <Login onLogin={setMe} />
+
+  const manager = me.role !== 'support'
   return (
-    <Layout admin={admin} onLogout={() => { auth.clear(); setAdmin(null) }}>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/users" element={<Users />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/countries" element={<Countries />} />
-        <Route path="/premium" element={<Premium />} />
-        <Route path="/orders" element={<Orders />} />
-        <Route path="/payments" element={<Payments />} />
-        <Route path="/support" element={<Support />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Layout>
+    <SessionCtx.Provider value={me}>
+      <Layout counters={counters} onLogout={() => { auth.clear(); setMe(null) }}>
+        <ErrorBoundary resetKey={location.pathname}>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/users" element={<Users />} />
+            <Route path="/support" element={<Support onChange={refreshCounters} />} />
+            <Route path="/settings" element={<Settings />} />
+            {manager && <Route path="/products" element={<Products />} />}
+            {manager && <Route path="/premium" element={<Premium />} />}
+            {manager && <Route path="/countries" element={<Countries />} />}
+            {manager && <Route path="/finance" element={<Finance onChange={refreshCounters} />} />}
+            {manager && <Route path="/automation" element={<Automation />} />}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+        </ErrorBoundary>
+      </Layout>
+    </SessionCtx.Provider>
   )
 }

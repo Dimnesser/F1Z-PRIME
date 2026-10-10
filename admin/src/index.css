@@ -2,44 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+:root { color-scheme: dark; -webkit-tap-highlight-color: transparent; }
 html, body, #root { background: #09090F; min-height: 100%; }
-body { @apply font-sans text-ink antialiased; }
-body::before {
-  content: ''; position: fixed; inset: -10% -10% auto 30%; height: 480px; pointer-events: none; z-index: 0;
-  background: radial-gradient(40% 50% at 30% 30%, rgba(139,92,246,0.16), transparent 70%), radial-gradient(30% 40% at 85% 10%, rgba(34,211,238,0.10), transparent 70%);
-}
+html { overflow-x: hidden; }
+body { @apply font-sans text-ink antialiased; overflow-x: hidden; }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
 
 @layer components {
-  .card { @apply rounded-3xl border border-white/[0.06] bg-card shadow-card; }
-  .glass { @apply border border-white/[0.07] bg-white/[0.035] backdrop-blur-xl; }
-  .text-gradient { @apply bg-brand bg-clip-text text-transparent; }
-  .input { @apply h-11 w-full rounded-xl border border-white/[0.08] bg-surface px-3.5 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-primary/60 focus:ring-4 focus:ring-primary/15; }
-  textarea.input { @apply h-auto py-3; }
-  .label { @apply mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-muted; }
+  .card { @apply rounded-2xl border border-white/[0.06] bg-card shadow-card; }
+  .input {
+    @apply h-11 w-full rounded-xl border border-white/[0.08] bg-surface px-3.5 text-[15px] text-ink outline-none transition
+      placeholder:text-muted/60 focus:border-primary/60 focus:ring-4 focus:ring-primary/15 disabled:opacity-60 sm:text-sm;
+  }
+  textarea.input { @apply h-auto py-3 leading-relaxed; }
+  select.input { @apply cursor-pointer appearance-none bg-no-repeat pr-9; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%239494A8' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-position: right 0.75rem center; }
+  .label { @apply mb-1.5 block text-[12px] font-semibold text-muted; }
   .th { @apply whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-muted; }
-  .td { @apply whitespace-nowrap px-4 py-3 text-sm; }
+  .td { @apply px-4 py-3 text-sm; }
+  .chip { @apply inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.08] bg-surface px-3.5 text-[13px] font-semibold text-muted transition hover:text-ink; }
+  .chip-active { @apply border-primary/40 bg-primary/15 text-ink; }
+  .tabular { font-variant-numeric: tabular-nums; }
 }
 
-/* Content entrance animations are pure CSS: if a WebView pauses or skips them,
-   the element simply stays visible (no JS-driven opacity:0 that can get stuck). */
-@keyframes f1z-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
-.fade-in { animation: f1z-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.stagger > * { animation: f1z-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-.stagger > *:nth-child(2) { animation-delay: 40ms; }
-.stagger > *:nth-child(3) { animation-delay: 80ms; }
-.stagger > *:nth-child(4) { animation-delay: 120ms; }
-.stagger > *:nth-child(5) { animation-delay: 160ms; }
-.stagger > *:nth-child(6) { animation-delay: 200ms; }
-.stagger > *:nth-child(7) { animation-delay: 240ms; }
-.stagger > *:nth-child(8) { animation-delay: 280ms; }
-.stagger > *:nth-child(9) { animation-delay: 320ms; }
-.stagger > *:nth-child(10) { animation-delay: 360ms; }
-.stagger > *:nth-child(11) { animation-delay: 400ms; }
-.stagger > *:nth-child(12) { animation-delay: 440ms; }
+/* Entrance animations are pure CSS: if a browser skips them the element simply stays visible. */
+@keyframes f1z-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes f1z-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes f1z-pop { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes f1z-sheet { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes f1z-toast { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: f1z-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.overlay-in { animation: f1z-fade 0.18s ease-out; }
+.pop-in { animation: f1z-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.toast-in { animation: f1z-toast 0.22s ease-out; }
+@media (max-width: 639px) { .pop-in { animation: f1z-sheet 0.26s cubic-bezier(0.2, 0.8, 0.2, 1); } }
 @media (prefers-reduced-motion: reduce) {
-  .fade-in, .stagger > * { animation: none; }
+  .fade-in, .overlay-in, .pop-in, .toast-in { animation: none; }
 }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

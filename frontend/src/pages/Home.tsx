@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ArrowRight, Gem, Globe2, Headphones, ShieldCheck, Sparkles, Undo2, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { PremiumCard, ProductMini } from '../components/Cards'
+import { MaintenanceNotice, StoreLinks } from '../components/StoreInfo'
 import { TopBar } from '../components/TopBar'
 import { SectionHeader, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
@@ -23,34 +24,44 @@ export default function Home() {
   return (
     <div className="space-y-7">
       <TopBar />
+      <MaintenanceNotice />
 
       {/* Banner */}
       <motion.div
         className="fade-in relative overflow-hidden rounded-[30px] bg-brand p-[1.5px] shadow-glow"
       >
         <div className="relative overflow-hidden rounded-[29px] bg-[radial-gradient(120%_120%_at_0%_0%,#2a1858_0%,#120f2a_45%,#0b1a24_100%)] p-5">
+          {s?.banner_image_url?.startsWith('https://') && (
+            <>
+              <img src={s.banner_image_url} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#0b0b16]/90 via-[#0b0b16]/60 to-transparent" />
+            </>
+          )}
           <div className="pointer-events-none absolute -right-10 -top-10 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.45),rgba(34,211,238,0.18)_55%,transparent)]" />
           <div className="absolute right-4 top-5">
             <div className="h-20 w-20 rounded-full bg-brand p-[2px] shadow-glow-cyan">
               <img src="/brand.jpg" alt="" className="h-full w-full rounded-full object-cover" />
             </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.15em] text-white/90 ring-1 ring-white/15">
+          <span className="relative inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.15em] text-white/90 ring-1 ring-white/15">
             <Sparkles className="h-3 w-3" /> {s?.shop_name ?? 'F1Z PRIME'}
           </span>
-          <h2 className="mt-3 max-w-[210px] font-display text-[22px] font-bold leading-[1.15] text-white">
+          <h2 className="relative mt-3 max-w-[210px] font-display text-[22px] font-bold leading-[1.15] text-white">
             {s?.banner_title ?? 'Премиальные цифровые товары'}
           </h2>
-          <p className="mt-2 max-w-[260px] text-[13px] leading-snug text-white/70">{s?.banner_subtitle}</p>
+          <p className="relative mt-2 max-w-[260px] text-[13px] leading-snug text-white/70">{s?.banner_subtitle}</p>
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={() => navigate('/catalog')}
-            className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-[13.5px] font-bold text-bg"
+            className="relative mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-[13.5px] font-bold text-bg"
           >
             Перейти в каталог <ArrowRight className="h-4 w-4" />
           </motion.button>
         </div>
       </motion.div>
+
+      {s?.shop_description && <p className="-mt-3 px-1 text-[13.5px] leading-relaxed text-muted">{s.shop_description}</p>}
+      <StoreLinks />
 
       {/* Categories */}
       <section>

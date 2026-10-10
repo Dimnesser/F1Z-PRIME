@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast'
 import { Badge, Button, EmptyState, PageTitle, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { date } from '../lib/format'
+import { StoreLinks } from '../components/StoreInfo'
 import { useConfig } from '../lib/queries'
 import { useBack } from '../lib/useBack'
 
@@ -48,6 +49,7 @@ export default function Support() {
         subtitle={`Ответим в Telegram. Контакт: ${config?.settings.support_contact ?? ''}`}
         right={<div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-secondary/15 text-secondary"><Headphones className="h-6 w-6" /></div>}
       />
+      <div className="mb-3"><StoreLinks /></div>
       <Button className="mb-5 w-full" onClick={() => setOpen(true)}><MessageCirclePlus className="h-5 w-5" /> Новое обращение</Button>
       {isLoading ? (
         <Skeleton className="h-40 rounded-3xl" />

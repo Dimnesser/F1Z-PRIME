@@ -2,9 +2,10 @@ import { Lock } from 'lucide-react'
 import { useState } from 'react'
 import { Btn, Field } from '../components/ui'
 import { api, auth } from '../lib/api'
+import type { Me } from '../lib/types'
 
-export default function Login({ onLogin }: { onLogin: (name: string) => void }) {
-  const [username, setUsername] = useState('admin')
+export default function Login({ onLogin }: { onLogin: (me: Me) => void }) {
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -14,9 +15,9 @@ export default function Login({ onLogin }: { onLogin: (name: string) => void }) 
     setLoading(true)
     setError('')
     try {
-      const r = await api<{ token: string; username: string }>('/login', { method: 'POST', body: { username, password } })
+      const r = await api<{ token: string }>('/login', { method: 'POST', body: { username: username.trim(), password } })
       auth.set(r.token)
-      onLogin(r.username)
+      onLogin(await api<Me>('/me'))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -25,16 +26,18 @@ export default function Login({ onLogin }: { onLogin: (name: string) => void }) 
   }
 
   return (
-    <div className="relative z-10 grid min-h-screen place-items-center p-4">
-      <form onSubmit={submit} className="fade-in card w-full max-w-sm p-8">
-        <div className="mx-auto h-24 w-24 rounded-full bg-brand p-[3px] shadow-glow"><img src="/admin/brand.jpg" alt="F1Z PRIME" className="h-full w-full rounded-full object-cover" /></div>
-        <h1 className="mt-5 text-center font-display text-2xl font-bold">F1Z <span className="text-gradient">PRIME</span></h1>
-        <p className="mt-1 text-center text-sm text-muted">Панель администратора</p>
-        <div className="mt-8 space-y-4">
-          <Field label="Логин"><input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></Field>
-          <Field label="Пароль"><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus /></Field>
-          {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-          <Btn className="h-12 w-full" loading={loading}><Lock className="h-4 w-4" /> Войти</Btn>
+    <div className="grid min-h-screen place-items-center px-4 py-10">
+      <form onSubmit={submit} className="fade-in w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <img src="/admin/brand.jpg" alt="F1Z PRIME" className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-glow ring-1 ring-white/10" />
+          <h1 className="mt-5 font-display text-2xl font-bold">F1Z <span className="text-primary-soft">PRIME</span></h1>
+          <p className="mt-1 text-sm text-muted">Панель управления магазином</p>
+        </div>
+        <div className="card space-y-4 p-6">
+          <Field label="Логин"><input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" autoFocus /></Field>
+          <Field label="Пароль"><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></Field>
+          {error && <div className="rounded-xl bg-danger/10 px-3 py-2.5 text-sm text-danger">{error}</div>}
+          <Btn type="submit" size="lg" className="w-full" loading={loading} disabled={!username || !password}><Lock className="h-4 w-4" /> Войти</Btn>
         </div>
       </form>
     </div>

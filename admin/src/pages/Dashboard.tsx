@@ -1,104 +1,168 @@
-import { Boxes, CreditCard, Gem, Headphones, ShoppingCart, TrendingUp, Users } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { Badge, ORDER_STATUS, PageHead, Skeleton, UserCell } from '../components/ui'
-import { dt, money } from '../lib/api'
-import type { Order, User } from '../lib/types'
+import clsx from 'clsx'
+import {
+  AlertTriangle, ArrowRight, Boxes, Clock, CreditCard, Headphones, PackagePlus, Percent, ShoppingCart, TrendingUp, UserPlus, Users, Wallet,
+} from 'lucide-react'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AreaChart, BarList, MiniBars } from '../components/charts'
+import { Card, Chips, Empty, ErrorBox, OrderBadge, PageHead, Skeleton } from '../components/ui'
+import { ago, compactMoney, money, num } from '../lib/api'
+import { useCanManage } from '../lib/session'
+import type { Order, SeriesPoint } from '../lib/types'
 import { useApi } from '../lib/useApi'
 
 interface Dash {
-  users: number; orders: number; paid_orders: number; revenue: number; stock: number; premium_available: number
-  pending_payments: number; open_tickets: number; daily: { date: string; revenue: number; orders: number }[]
-  recent_orders: Order[]; recent_users: User[]
+  days: number; users: number; new_users_today: number; orders: number; paid_orders: number; orders_today: number
+  revenue: number; revenue_today: number; revenue_period: number; stock: number; premium_available: number
+  pending_orders: number; pending_payments: number; failed_payments: number; open_tickets: number; low_stock_threshold: number
+  sales: SeriesPoint[]; new_users: SeriesPoint[]
+  categories: { slug: string; title: string; revenue: number; orders: number }[]
+  low_stock: { id: number; title: string; stock: number; flag: string | null; price: number }[]
+  recent_orders: Order[]
+}
+
+function Stat({ icon: Icon, label, value, sub, tone = 'violet', to }: {
+  icon: typeof Users; label: string; value: string; sub?: string; tone?: 'violet' | 'cyan' | 'green' | 'amber' | 'red'; to?: string
+}) {
+  const tones = {
+    violet: 'bg-primary/15 text-primary-soft', cyan: 'bg-secondary/15 text-secondary', green: 'bg-success/15 text-success',
+    amber: 'bg-warning/15 text-warning', red: 'bg-danger/15 text-danger',
+  }
+  const body = (
+    <>
+      <div className="flex items-center justify-between">
+        <span className="text-[12.5px] font-semibold text-muted">{label}</span>
+        <span className={clsx('grid h-8 w-8 place-items-center rounded-lg', tones[tone])}><Icon className="h-4 w-4" /></span>
+      </div>
+      <div className="tabular mt-2 truncate font-display text-[22px] font-bold leading-tight sm:text-2xl">{value}</div>
+      {sub && <div className="mt-0.5 truncate text-xs text-muted">{sub}</div>}
+    </>
+  )
+  const cls = 'card block min-w-0 p-4 transition'
+  return to ? <Link to={to} className={clsx(cls, 'hover:border-white/[0.12]')}>{body}</Link> : <div className={cls}>{body}</div>
 }
 
 export default function Dashboard() {
-  const { data: d, loading } = useApi<Dash>('/dashboard')
-  const stats = d ? [
-    { label: 'Пользователи', value: d.users, icon: Users, tint: 'from-primary/30 to-primary/5 text-primary-soft' },
-    { label: 'Заказы', value: `${d.orders}`, sub: `${d.paid_orders} оплачено`, icon: ShoppingCart, tint: 'from-secondary/30 to-secondary/5 text-secondary' },
-    { label: 'Выручка', value: money(d.revenue), icon: TrendingUp, tint: 'from-success/30 to-success/5 text-success' },
-    { label: 'Товары в наличии', value: d.stock, sub: `${d.premium_available} красивых номеров`, icon: Boxes, tint: 'from-warning/30 to-warning/5 text-warning' },
-  ] : []
-  const max = Math.max(1, ...(d?.daily.map((x) => x.revenue) ?? [1]))
+  const [days, setDays] = useState<'7' | '30' | '90'>('30')
+  const { data: d, loading, error, reload } = useApi<Dash>(`/dashboard?days=${days}`, { poll: 60_000 })
+  const navigate = useNavigate()
+  const manage = useCanManage()
 
   return (
-    <div>
-      <PageHead title="Dashboard" subtitle="Ключевые показатели магазина" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {loading && [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-3xl" />)}
-        {stats.map((s, i) => (
-          <div key={s.label} style={{ animationDelay: `${i * 50}ms` }} className="fade-in card relative overflow-hidden p-5 [animation-fill-mode:backwards]">
-            <div className={`absolute -right-6 -top-6 h-28 w-28 rounded-full bg-gradient-to-br ${s.tint} blur-2xl`} />
-            <div className={`relative grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br ${s.tint}`}><s.icon className="h-5 w-5" /></div>
-            <div className="relative mt-4 text-[12px] font-semibold uppercase tracking-wider text-muted">{s.label}</div>
-            <div className="relative mt-1 font-display text-2xl font-bold">{s.value}</div>
-            {s.sub && <div className="relative text-xs text-muted">{s.sub}</div>}
-          </div>
-        ))}
+    <div className="fade-in">
+      <PageHead title="Обзор" subtitle="Ключевые показатели магазина в реальном времени" />
+      {error && <div className="mb-4"><ErrorBox text={error} onRetry={() => reload()} /></div>}
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {loading || !d ? [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <Skeleton key={i} className="h-[104px] rounded-2xl" />) : (<>
+          <Stat icon={Wallet} label="Общая выручка" value={money(d.revenue)} sub={`${num(d.paid_orders)} оплаченных заказов`} tone="green" to={manage ? '/finance' : undefined} />
+          <Stat icon={TrendingUp} label="Выручка сегодня" value={money(d.revenue_today)} sub={`${d.orders_today} заказов сегодня`} tone="violet" />
+          <Stat icon={ShoppingCart} label="Заказы" value={num(d.orders)} sub={`за ${d.days} дн: ${money(d.revenue_period)}`} tone="cyan" to="/orders" />
+          <Stat icon={Users} label="Пользователи" value={num(d.users)} sub={`+${d.new_users_today} сегодня`} tone="violet" to="/users" />
+          <Stat icon={Boxes} label="Товаров в наличии" value={num(d.stock)} sub={`+ ${d.premium_available} красивых номеров`} tone="cyan" to={manage ? '/products' : undefined} />
+          <Stat icon={Clock} label="Ожидают оплаты" value={num(d.pending_orders)} sub={d.pending_payments ? `${d.pending_payments} платежей на проверке` : 'нет платежей на проверке'} tone="amber" to="/orders" />
+          <Stat icon={AlertTriangle} label="Неудачные платежи" value={num(d.failed_payments)} sub="отклонённые" tone="red" to={manage ? '/finance' : undefined} />
+          <Stat icon={Headphones} label="Открытые обращения" value={num(d.open_tickets)} sub="ждут ответа" tone="amber" to="/support" />
+        </>)}
       </div>
 
-      {d && (d.pending_payments > 0 || d.open_tickets > 0) && (
-        <div className="mt-4 flex flex-wrap gap-3">
-          {d.pending_payments > 0 && <Link to="/payments" className="flex items-center gap-2 rounded-2xl bg-warning/10 px-4 py-3 text-sm font-semibold text-warning ring-1 ring-warning/25"><CreditCard className="h-4 w-4" /> {d.pending_payments} платежей ждут проверки</Link>}
-          {d.open_tickets > 0 && <Link to="/support" className="flex items-center gap-2 rounded-2xl bg-secondary/10 px-4 py-3 text-sm font-semibold text-secondary ring-1 ring-secondary/25"><Headphones className="h-4 w-4" /> {d.open_tickets} открытых обращений</Link>}
-        </div>
+      {d && d.pending_payments > 0 && manage && (
+        <Link to="/finance" className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-warning/10 px-4 py-3 text-sm font-semibold text-warning ring-1 ring-warning/20">
+          <span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> {d.pending_payments} ручных платежей ждут проверки</span>
+          <ArrowRight className="h-4 w-4" />
+        </Link>
       )}
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="card p-5 xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display font-semibold">Выручка за 14 дней</h2>
-            <Gem className="h-4 w-4 text-primary-soft" />
-          </div>
-          {d && d.daily.length === 0 && <div className="py-14 text-center text-sm text-muted">Оплаченных заказов пока нет</div>}
-          <div className="flex h-48 gap-2 pt-8">
-            {d?.daily.map((x) => (
-              <div key={x.date} className="group flex max-w-[72px] flex-1 flex-col items-center gap-2">
-                <div className="relative w-full flex-1">
-                  <div style={{ height: `${(x.revenue / max) * 100}%` }} className="absolute bottom-0 w-full rounded-lg bg-brand opacity-80 transition-[height] duration-500 group-hover:opacity-100" />
-                  <div className="absolute -top-7 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-2 py-1 text-[11px] font-bold group-hover:block">{money(x.revenue)}</div>
-                </div>
-                <span className="text-[10px] text-muted">{x.date.slice(8, 10)}.{x.date.slice(5, 7)}</span>
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2" title="Продажи"
+          action={<Chips value={days} onChange={setDays} className="!mx-0 !px-0" options={[{ value: '7', label: '7 дн' }, { value: '30', label: '30 дн' }, { value: '90', label: '90 дн' }]} />}>
+          {!d ? <Skeleton className="h-[240px]" /> : (
+            <>
+              <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                <div><span className="text-muted">Выручка: </span><span className="tabular font-bold">{money(d.revenue_period)}</span></div>
+                <div><span className="text-muted">Заказов: </span><span className="tabular font-bold">{num(d.sales.reduce((s, x) => s + (x.orders ?? 0), 0))}</span></div>
               </div>
-            ))}
-          </div>
-        </div>
-        <div className="card p-5">
-          <h2 className="mb-4 font-display font-semibold">Новые пользователи</h2>
-          <div className="space-y-3">
-            {d?.recent_users.map((u) => (
-              <div key={u.id} className="flex items-center justify-between">
-                <UserCell u={u} />
-                <span className="text-xs text-muted">{dt(u.created_at)}</span>
+              <AreaChart data={d.sales.map((x) => ({ date: x.date, value: x.revenue ?? 0 }))} format={(v) => `${compactMoney(v)} грн`} />
+            </>
+          )}
+        </Card>
+        <Card title="Новые пользователи" action={d && <span className="tabular text-sm font-bold">+{num(d.new_users.reduce((s, x) => s + (x.users ?? 0), 0))}</span>}>
+          {!d ? <Skeleton className="h-[240px]" /> : (
+            <>
+              <MiniBars data={d.new_users.map((x) => ({ date: x.date, value: x.users ?? 0 }))} height={150} />
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl bg-white/[0.03] p-3"><div className="text-xs text-muted">Сегодня</div><div className="tabular font-bold">+{d.new_users_today}</div></div>
+                <div className="rounded-xl bg-white/[0.03] p-3"><div className="text-xs text-muted">Всего</div><div className="tabular font-bold">{num(d.users)}</div></div>
               </div>
-            ))}
-          </div>
+            </>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2" pad={false} title="Последние заказы" action={<Link to="/orders" className="text-sm font-semibold text-primary-soft">Все →</Link>}>
+          {!d ? <div className="space-y-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div> : d.recent_orders.length === 0 ? <Empty title="Заказов пока нет" /> : (
+            <div className="divide-y divide-white/[0.05]">
+              {d.recent_orders.map((o) => (
+                <button key={o.id} type="button" onClick={() => navigate(`/orders?open=${o.id}`)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.02] sm:px-5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="tabular text-xs text-muted">#{o.id}</span>
+                      <span className="truncate text-sm font-semibold">{o.item_title}</span>
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted">{o.user.username ? `@${o.user.username}` : o.user.telegram_id} · {ago(o.created_at)}</div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="tabular text-sm font-bold">{money(o.total)}</span>
+                    <OrderBadge status={o.status} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+        <div className="space-y-4">
+          <Card title="Популярные категории">
+            {!d ? <Skeleton className="h-32" /> : d.categories.length === 0 ? <div className="py-6 text-center text-sm text-muted">Нет продаж за период</div> : (
+              <BarList items={d.categories.map((c) => ({ label: c.title, value: c.revenue, sub: `${c.orders} шт` }))} />
+            )}
+          </Card>
+          <Card title="Низкие остатки" action={d && <span className="text-xs text-muted">≤ {d.low_stock_threshold} шт</span>}>
+            {!d ? <Skeleton className="h-24" /> : d.low_stock.length === 0 ? <div className="py-4 text-center text-sm text-muted">Всё в наличии 👌</div> : (
+              <div className="space-y-1">
+                {d.low_stock.map((p) => (
+                  <Link key={p.id} to={manage ? `/products?edit=${p.id}` : '#'} className="flex items-center justify-between gap-3 rounded-xl px-2 py-2 text-sm hover:bg-white/[0.03]">
+                    <span className="truncate">{p.flag ?? '📦'} {p.title}</span>
+                    <span className={clsx('tabular shrink-0 font-bold', p.stock === 0 ? 'text-danger' : 'text-warning')}>{p.stock} шт</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
 
-      <div className="card mt-6 overflow-hidden">
-        <div className="flex items-center justify-between p-5 pb-3">
-          <h2 className="font-display font-semibold">Последние заказы</h2>
-          <Link to="/orders" className="text-sm font-semibold text-primary-soft">Все заказы →</Link>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead><tr><th className="th">#</th><th className="th">Товар</th><th className="th">Покупатель</th><th className="th">Сумма</th><th className="th">Статус</th><th className="th">Дата</th></tr></thead>
-            <tbody className="divide-y divide-white/[0.05]">
-              {d?.recent_orders.map((o) => (
-                <tr key={o.id} className="hover:bg-white/[0.02]">
-                  <td className="td font-mono text-muted">#{o.id}</td>
-                  <td className="td font-semibold">{o.item_title}</td>
-                  <td className="td"><UserCell u={o.user} /></td>
-                  <td className="td font-bold">{money(o.total)}</td>
-                  <td className="td"><Badge tone={ORDER_STATUS[o.status].tone}>{ORDER_STATUS[o.status].label}</Badge></td>
-                  <td className="td text-muted">{dt(o.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {manage && (
+        <Card className="mt-4" title="Быстрые действия">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { to: '/products?new=1', icon: PackagePlus, label: 'Добавить товар' },
+              { to: '/products', icon: Percent, label: 'Изменить цены' },
+              { to: '/orders?status=paid', icon: ShoppingCart, label: 'Заказы к выдаче' },
+              { to: '/support?status=open', icon: Headphones, label: 'Ответить клиентам' },
+              { to: '/finance', icon: CreditCard, label: 'Проверить платежи' },
+              { to: '/users', icon: UserPlus, label: 'Найти пользователя' },
+              { to: '/automation', icon: Clock, label: 'Автоматизация' },
+              { to: '/settings', icon: Boxes, label: 'Настройки магазина' },
+            ].map((a) => (
+              <Link key={a.label} to={a.to} className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-3 text-sm font-semibold transition hover:bg-white/[0.06]">
+                <a.icon className="h-[18px] w-[18px] shrink-0 text-primary-soft" /><span className="truncate">{a.label}</span>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
+      {!manage && <p className="mt-4 text-xs text-muted">Режим поддержки: доступны обращения, заказы и пользователи (только просмотр).</p>}
     </div>
   )
 }

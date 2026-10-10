@@ -95,3 +95,11 @@ export function backButton(onClick: () => void): () => void {
     bb.hide()
   }
 }
+
+/** Opens t.me links inside Telegram, other https links in the in-app browser. */
+export function openExternal(url: string): void {
+  if (!/^https:\/\//.test(url)) return
+  if (url.startsWith('https://t.me/') && tg?.openTelegramLink) tg.openTelegramLink(url)
+  else if (tg?.openLink) tg.openLink(url)
+  else window.open(url, '_blank', 'noopener')
+}
