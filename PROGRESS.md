@@ -44,10 +44,12 @@
   payment, support reply, maintenance on→503→off, store settings in public config;
   no page errors, no horizontal scroll on mobile.
 
-## Stage 4 — Deploy to vps4 ⛔ not done
-- vps4 reachable; containers healthy; DB backup made: `/root/f1z-backup/db-20261010-171134.sql.gz` (pg_dump, 12 tables).
-- Blocked: the repository is private, so the server cannot `git clone` it, and uploading the code
-  archive from the agent environment was not permitted. Production still runs the previous version.
-- To finish: give the server read access to the repo (deploy key or read-only token), or allow the
-  upload, then run `/root/f1z/f1z-deploy-v2.sh` (backup → sync code keeping .env → rebuild api+web;
-  migration 0002 applies automatically on API start).
+## Stage 4 — Deploy to vps4 ✅
+- Delivery: git clone over a read-only deploy key (`github-f1z`), pinned to `890c261`; site kept serving
+  while images were built. `/opt/f1z-prime/DEPLOYED_COMMIT` = `890c261 PROGRESS: deploy status`.
+- Backups before update: `/root/f1z-backup/db-20261010-173257.sql.gz` (pg_dump, 12 tables),
+  `/root/f1z-backup/code-20261010-173257.tgz`. `.env` checksum identical before/after.
+- Migration 0001 → 0002 applied; data kept (users 3, orders 3, products 8, settings 28).
+- Checks: HTTPS 200 (cert valid to 2027-01-08), Mini App + deep link 200, /api/health ok, admin panel 200
+  (`Cache-Control: no-cache`), owner login OK, all admin sections 200, bot polling @prime_f1z_bot,
+  no errors in API logs, bot token not present in logs.
