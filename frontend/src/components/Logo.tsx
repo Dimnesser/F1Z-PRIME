@@ -1,8 +1,8 @@
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="relative grid h-9 w-9 place-items-center rounded-xl bg-brand shadow-glow">
-        <span className="font-display text-[13px] font-extrabold tracking-tighter text-white">F1Z</span>
+      <div className="relative h-10 w-10 shrink-0 rounded-full bg-brand p-[2px] shadow-glow">
+        <img src="/brand.jpg" alt="F1Z PRIME" className="h-full w-full rounded-full object-cover" />
       </div>
       {!compact && (
         <div className="leading-none">

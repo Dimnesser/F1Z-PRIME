@@ -20,7 +20,7 @@ export function Layout({ children, admin, onLogout }: { children: ReactNode; adm
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-3 py-2">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand shadow-glow"><span className="font-display text-[13px] font-extrabold text-white">F1Z</span></div>
+        <div className="h-11 w-11 shrink-0 rounded-full bg-brand p-[2px] shadow-glow"><img src="/admin/brand.jpg" alt="" className="h-full w-full rounded-full object-cover" /></div>
         <div className="leading-none">
           <div className="font-display text-[15px] font-bold">F1Z <span className="text-gradient">PRIME</span></div>
           <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">admin panel</div>

@@ -34,14 +34,14 @@ export default function Home() {
         <div className="relative overflow-hidden rounded-[29px] bg-[radial-gradient(120%_120%_at_0%_0%,#2a1858_0%,#120f2a_45%,#0b1a24_100%)] p-5">
           <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 animate-spin-slow rounded-full bg-[conic-gradient(from_0deg,rgba(139,92,246,0.5),rgba(34,211,238,0.4),transparent,rgba(139,92,246,0.5))] opacity-60 blur-2xl" />
           <div className="absolute right-4 top-5 animate-float">
-            <div className="grid h-16 w-16 rotate-12 place-items-center rounded-3xl bg-white/10 ring-1 ring-white/20 backdrop-blur">
-              <Gem className="h-8 w-8 text-white" />
+            <div className="h-20 w-20 rounded-full bg-brand p-[2px] shadow-glow-cyan">
+              <img src="/brand.jpg" alt="" className="h-full w-full rounded-full object-cover" />
             </div>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.15em] text-white/90 ring-1 ring-white/15">
             <Sparkles className="h-3 w-3" /> {s?.shop_name ?? 'F1Z PRIME'}
           </span>
-          <h2 className="mt-3 max-w-[230px] font-display text-[22px] font-bold leading-[1.15] text-white">
+          <h2 className="mt-3 max-w-[210px] font-display text-[22px] font-bold leading-[1.15] text-white">
             {s?.banner_title ?? 'Премиальные цифровые товары'}
           </h2>
           <p className="mt-2 max-w-[260px] text-[13px] leading-snug text-white/70">{s?.banner_subtitle}</p>

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Lock, ShieldCheck } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import { useState } from 'react'
 import { Btn, Field } from '../components/ui'
 import { api, auth } from '../lib/api'
@@ -28,7 +28,7 @@ export default function Login({ onLogin }: { onLogin: (name: string) => void }) 
   return (
     <div className="relative z-10 grid min-h-screen place-items-center p-4">
       <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onSubmit={submit} className="card w-full max-w-sm p-8">
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-brand shadow-glow"><ShieldCheck className="h-8 w-8 text-white" /></div>
+        <div className="mx-auto h-24 w-24 rounded-full bg-brand p-[3px] shadow-glow"><img src="/admin/brand.jpg" alt="F1Z PRIME" className="h-full w-full rounded-full object-cover" /></div>
         <h1 className="mt-5 text-center font-display text-2xl font-bold">F1Z <span className="text-gradient">PRIME</span></h1>
         <p className="mt-1 text-center text-sm text-muted">Панель администратора</p>
         <div className="mt-8 space-y-4">
