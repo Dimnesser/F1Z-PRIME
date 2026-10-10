@@ -13,6 +13,7 @@ from app.api.deps import SessionDep, UserDep
 from app.config import get_settings
 from app.models import (
     BalanceTransaction,
+    Category,
     Country,
     Order,
     Payment,
@@ -47,7 +48,7 @@ from app.schemas import (
 from app.services import orders as order_service
 from app.services import payments as payment_service
 from app.services import settings as settings_service
-from app.services import telegram
+from app.services import monitor, telegram
 from app.services.common import utcnow
 
 router = APIRouter(prefix="/api", tags=["miniapp"])
@@ -78,6 +79,8 @@ async def report_client_error(body: ClientError, request: Request) -> Response:
         "client %s on %s: %s | ua=%s | stack=%s",
         body.kind, body.path, body.message, body.ua, body.stack.replace("\n", " <- ")[:2000],
     )
+    if body.kind != "smoke":
+        await monitor.record("client", body.message, body.path, f"{body.ua}\n{body.stack}")
     return Response(status_code=204)
 
 CATEGORY_META = {
@@ -153,13 +156,20 @@ async def categories(session: SessionDep) -> list[dict]:
             .group_by(Product.category)
         )
     ).all()
+    meta = {c.slug: c for c in (await session.scalars(select(Category))).all()}
     premium = await session.scalar(
         select(func.count(PremiumNumber.id)).where(PremiumNumber.status == PremiumStatus.available)
     )
-    result = [
-        {"slug": cat, "count": cnt, "stock": int(stock), **CATEGORY_META.get(cat, {"title": cat.title(), "icon": "box"})}
-        for cat, cnt, stock in rows
-    ]
+    result = []
+    for cat, cnt, stock in sorted(rows, key=lambda r: (meta[r[0]].sort_order if r[0] in meta else 1000, r[0])):
+        c = meta.get(cat)
+        if c is not None and not c.is_active:
+            continue
+        fallback = CATEGORY_META.get(cat, {"title": cat.title(), "icon": "box"})
+        result.append({
+            "slug": cat, "count": cnt, "stock": int(stock),
+            "title": c.title if c else fallback["title"], "icon": c.icon if c else fallback["icon"],
+        })
     result.append({"slug": "premium", "count": premium or 0, "stock": premium or 0, **CATEGORY_META["premium"]})
     return result
 
@@ -250,7 +260,8 @@ async def create_order(body: OrderCreate, user: UserDep, session: SessionDep) ->
     await session.commit()
     if created:
         await telegram.notify_admins(
-            f"🆕 Новый заказ #{order.id}\n{order.item_title} × {order.quantity}\nСумма: {order.total} грн"
+            f"🆕 Новый заказ #{order.id}\n{order.item_title} × {order.quantity}\nСумма: {order.total} грн",
+            kind="orders",
         )
     return order
 
@@ -285,7 +296,9 @@ async def pay_order(order_id: int, body: PayRequest, user: UserDep, session: Ses
     order = await session.get(Order, order_id, populate_existing=True)
     if body.method in (PaymentMethod.balance, PaymentMethod.test) and order is not None:
         await telegram.notify(user.telegram_id, f"✅ Заказ #{order.id} оплачен. Статус: {order.status.value}")
-        await telegram.notify_admins(f"💰 Заказ #{order.id} оплачен ({body.method.value}) — {order.total} грн")
+        await telegram.notify_admins(
+            f"💰 Заказ #{order.id} оплачен ({body.method.value}) — {order.total} грн", kind="orders"
+        )
     return PayResponse(
         payment=PaymentOut.model_validate(result.payment, from_attributes=True),
         order=OrderOut.model_validate(order, from_attributes=True) if order else None,
@@ -329,7 +342,8 @@ async def submit_manual(payment_id: int, body: ManualSubmit, user: UserDep, sess
     await session.commit()
     await telegram.notify_admins(
         f"🧾 Ручной платёж #{payment.id} ожидает проверки: {payment.amount} грн\n"
-        f"Пользователь: {user.telegram_id} @{user.username or '-'}\nКомментарий: {body.comment or '-'}"
+        f"Пользователь: {user.telegram_id} @{user.username or '-'}\nКомментарий: {body.comment or '-'}",
+        kind="payments",
     )
     return payment
 
@@ -356,7 +370,9 @@ async def create_ticket(body: TicketCreate, user: UserDep, session: SessionDep) 
     ticket.messages.append(SupportMessage(is_admin=False, text=body.text.strip()))
     session.add(ticket)
     await session.commit()
-    await telegram.notify_admins(f"🆘 Новое обращение #{ticket.id}: {ticket.subject}\n\n{body.text[:500]}")
+    await telegram.notify_admins(
+        f"🆘 Новое обращение #{ticket.id}: {ticket.subject}\n\n{body.text[:500]}", kind="tickets"
+    )
     return await _load_ticket(session, ticket.id, user.id)
 
 
@@ -386,5 +402,5 @@ async def ticket_reply(ticket_id: int, body: MessageCreate, user: UserDep, sessi
     ticket.status = TicketStatus.open
     ticket.updated_at = utcnow()
     await session.commit()
-    await telegram.notify_admins(f"💬 Сообщение в обращении #{ticket.id}:\n{body.text[:500]}")
+    await telegram.notify_admins(f"💬 Сообщение в обращении #{ticket.id}:\n{body.text[:500]}", kind="tickets")
     return await _load_ticket(session, ticket_id, user.id)

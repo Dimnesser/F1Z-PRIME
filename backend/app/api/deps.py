@@ -3,13 +3,17 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+import time
+from collections import defaultdict, deque
+
+from fastapi import Depends, Header, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import User
-from app.security import InitDataError, TelegramUser, decode_admin_token, validate_init_data
+from app.models import AdminUser, User
+from app.security import InitDataError, TelegramUser, decode_admin_claims, validate_init_data
 from app.services.orders import upsert_user
 
 log = logging.getLogger("f1z.auth")
@@ -49,13 +53,76 @@ async def current_user(
 UserDep = Annotated[User, Depends(current_user)]
 
 
-async def current_admin(authorization: Annotated[str | None, Header()] = None) -> str:
+class AdminIdentity(str):
+    """Admin username (a str, so it can be logged as-is) with its role attached."""
+
+    role: str
+
+    def __new__(cls, username: str, role: str) -> AdminIdentity:
+        obj = super().__new__(cls, username)
+        obj.role = role
+        return obj
+
+
+ROLE_LABELS = {"owner": "Владелец", "admin": "Администратор", "support": "Поддержка"}
+
+# Mutating admin requests per account per minute (protects against runaway scripts / stolen tokens).
+_admin_writes: dict[str, deque[float]] = defaultdict(deque)
+ADMIN_WRITE_LIMIT, ADMIN_WRITE_WINDOW = 120, 60.0
+
+
+def _rate_limit(key: str) -> None:
+    hits = _admin_writes[key]
+    now = time.monotonic()
+    while hits and now - hits[0] > ADMIN_WRITE_WINDOW:
+        hits.popleft()
+    if len(hits) >= ADMIN_WRITE_LIMIT:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много действий подряд. Подождите минуту.")
+    hits.append(now)
+
+
+async def current_admin(
+    request: Request,
+    session: SessionDep,
+    authorization: Annotated[str | None, Header()] = None,
+) -> AdminIdentity:
+    """Bearer-token auth (header, not cookies — so the admin API is not exposed to CSRF)."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Требуется авторизация администратора")
-    admin = decode_admin_token(authorization[7:].strip(), get_settings().secret_key)
-    if admin is None:
+    settings = get_settings()
+    claims = decode_admin_claims(authorization[7:].strip(), settings.secret_key)
+    if claims is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия администратора истекла")
-    return admin
+    username = str(claims["sub"])
+    if claims.get("src", "env") == "env":
+        if username != settings.admin_username:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия администратора истекла")
+        role = "owner"
+    else:
+        account = await session.scalar(select(AdminUser).where(AdminUser.username == username))
+        if account is None or not account.is_active:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Учётная запись отключена")
+        role = account.role.value  # role changes apply immediately, not at next login
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        _rate_limit(username)
+    return AdminIdentity(username, role)
 
 
-AdminDep = Annotated[str, Depends(current_admin)]
+AdminDep = Annotated[AdminIdentity, Depends(current_admin)]
+
+
+def require_role(*roles: str):
+    async def dep(admin: AdminDep) -> AdminIdentity:
+        if admin.role not in roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для этого действия")
+        return admin
+
+    return dep
+
+
+# Any admin-panel account (owner / admin / support).
+StaffDep = AdminDep
+# Owner and admins: catalog, orders, payments, settings.
+ManagerDep = Annotated[AdminIdentity, Depends(require_role("owner", "admin"))]
+# Owner only: admin accounts, backups.
+OwnerDep = Annotated[AdminIdentity, Depends(require_role("owner"))]

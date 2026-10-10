@@ -269,7 +269,7 @@ async def buy(cb: CallbackQuery) -> None:
         )
         return
     await _edit_or_send(cb, _order_text(order, paid_now=True), rows([_orders_btn()], menu_row()))
-    await tg_api.notify_admins(f"💰 Заказ #{order.id} оплачен с баланса — {order.total} грн (бот)")
+    await tg_api.notify_admins(f"💰 Заказ #{order.id} оплачен с баланса — {order.total} грн (бот)", kind="orders")
 
 
 def _orders_btn() -> InlineKeyboardButton:
@@ -468,7 +468,7 @@ async def ticket_text(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Обращение #{ticket_id} создано. Мы ответим в ближайшее время!", reply_markup=rows(menu_row())
     )
-    await tg_api.notify_admins(f"🆘 Новое обращение #{ticket_id} (бот) от {user.telegram_id}:\n{esc(text[:500])}")
+    await tg_api.notify_admins(f"🆘 Новое обращение #{ticket_id} (бот) от {user.telegram_id}:\n{esc(text[:500])}", kind="tickets")
 
 
 # ---------------------------------------------------------- Telegram Stars
@@ -509,7 +509,7 @@ async def successful_payment(message: Message) -> None:
         await message.answer(
             f"✅ Баланс пополнен на <b>{fmt_money(payment.amount)} грн</b>", reply_markup=rows(menu_row())
         )
-    await tg_api.notify_admins(f"⭐ Stars-платёж #{payment.id}: {payment.amount} грн ({payment.stars_amount} XTR)")
+    await tg_api.notify_admins(f"⭐ Stars-платёж #{payment.id}: {payment.amount} грн ({payment.stars_amount} XTR)", kind="payments")
 
 
 @router.message()

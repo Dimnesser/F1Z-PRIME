@@ -119,17 +119,23 @@ def check_admin_credentials(username: str, password: str, settings: Any) -> bool
     return user_ok and pass_ok
 
 
-def create_admin_token(username: str, secret_key: str, ttl_hours: int) -> str:
+def create_admin_token(username: str, secret_key: str, ttl_hours: int, level: str = "owner", source: str = "env") -> str:
+    """`role: admin` marks an admin-panel token; `lvl` is owner/admin/support, `src` is env (.env owner) or db."""
     now = int(time.time())
-    payload = {"sub": username, "role": "admin", "iat": now, "exp": now + ttl_hours * 3600}
+    payload = {"sub": username, "role": "admin", "lvl": level, "src": source, "iat": now, "exp": now + ttl_hours * 3600}
     return jwt.encode(payload, secret_key, algorithm="HS256")
 
 
-def decode_admin_token(token: str, secret_key: str) -> str | None:
+def decode_admin_claims(token: str, secret_key: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(token, secret_key, algorithms=["HS256"], options={"require": ["exp", "sub"]})
     except jwt.PyJWTError:
         return None
     if payload.get("role") != "admin":
         return None
-    return str(payload["sub"])
+    return payload
+
+
+def decode_admin_token(token: str, secret_key: str) -> str | None:
+    claims = decode_admin_claims(token, secret_key)
+    return str(claims["sub"]) if claims else None

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
@@ -318,6 +318,7 @@ class PaymentDecision(BaseModel):
 
 class AdminTicketOut(TicketOut):
     user: UserOut
+    assigned_to: str | None = None
 
 
 class AdminTicketDetailOut(AdminTicketOut):
@@ -330,3 +331,79 @@ class TicketStatusIn(BaseModel):
 
 class SettingsUpdate(BaseModel):
     values: dict[str, Annotated[str, Field(max_length=4000)]]
+
+
+class OrderEventOut(ORM):
+    id: int
+    from_status: str | None
+    to_status: str
+    actor: str
+    note: str | None
+    created_at: datetime
+
+
+class ProductBulk(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+    action: Literal["status", "price_set", "price_percent", "price_delta", "stock_set", "stock_delta", "category"]
+    value: str = Field(max_length=64)
+
+
+class ProductImport(BaseModel):
+    csv: str = Field(min_length=1, max_length=2_000_000)
+    dry_run: bool = False
+
+
+class CategoryIn(BaseModel):
+    slug: str = Field(min_length=2, max_length=32, pattern=r"^[a-z0-9_]+$")
+    title: str = Field(min_length=2, max_length=64)
+    icon: str = Field(default="box", pattern=r"^[a-z\-]{2,32}$")
+    sort_order: int = Field(default=100, ge=0, le=10000)
+    is_active: bool = True
+
+    @field_validator("slug")
+    @classmethod
+    def _not_reserved(cls, v: str) -> str:
+        if v == "premium":
+            raise ValueError("slug 'premium' is reserved for premium numbers")
+        return v
+
+
+class CategoryPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=64)
+    icon: str | None = Field(default=None, pattern=r"^[a-z\-]{2,32}$")
+    sort_order: int | None = Field(default=None, ge=0, le=10000)
+    is_active: bool | None = None
+
+
+class CategoryOut(ORM):
+    id: int
+    slug: str
+    title: str
+    icon: str
+    sort_order: int
+    is_active: bool
+
+
+class AdminAccountIn(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.\-]+$")
+    password: str = Field(min_length=10, max_length=128)
+    role: Literal["admin", "support"] = "support"
+
+
+class AdminAccountPatch(BaseModel):
+    role: Literal["admin", "support"] | None = None
+    is_active: bool | None = None
+    password: str | None = Field(default=None, min_length=10, max_length=128)
+
+
+class AdminAccountOut(ORM):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    last_login_at: datetime | None
+    created_at: datetime
+
+
+class TicketAssign(BaseModel):
+    assigned_to: str | None = Field(default=None, max_length=64)

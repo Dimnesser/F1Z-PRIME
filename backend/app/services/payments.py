@@ -72,6 +72,7 @@ async def _stars_invoice(session: AsyncSession, payment: Payment, title: str, de
 
 
 async def start_order_payment(session: AsyncSession, user: User, order_id: int, method: PaymentMethod) -> PaymentStart:
+    await settings_service.ensure_open(session)
     await _ensure_method_enabled(session, method)
     order = await lock(session, Order, order_id)
     if order is None or order.user_id != user.id:
@@ -156,6 +157,7 @@ async def start_order_payment(session: AsyncSession, user: User, order_id: int, 
 async def start_topup(session: AsyncSession, user: User, amount: Decimal, method: PaymentMethod) -> PaymentStart:
     if method == PaymentMethod.balance:
         raise ServiceError("Нельзя пополнить баланс с баланса")
+    await settings_service.ensure_open(session)
     await _ensure_method_enabled(session, method)
     amount = money(amount)
     min_t = await settings_service.get_decimal(session, "min_topup", "50")
@@ -227,7 +229,7 @@ async def confirm_payment(
     else:
         order = await lock(session, Order, payment.order_id) if payment.order_id else None
         if order is not None and order.status == OrderStatus.pending:
-            await mark_paid(session, order, payment.method.value)
+            await mark_paid(session, order, payment.method.value, actor=actor)
         else:
             # Money arrived for an order that is no longer payable — keep it on the user's balance.
             await change_balance(

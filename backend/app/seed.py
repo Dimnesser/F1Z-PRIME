@@ -14,7 +14,7 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.db import dispose_engine, session_factory
-from app.models import Country, PremiumNumber, Product, ProductStatus
+from app.models import Category, Country, PremiumNumber, Product, ProductStatus
 from app.services import settings as settings_service
 from app.services.masks import auto_mask
 
@@ -44,10 +44,21 @@ DEMO_PREMIUM = [
 ]
 
 
+CATEGORIES = [
+    ("numbers", "Номера по странам", "globe", 10),
+    ("digital", "Цифровые товары", "sparkles", 20),
+    ("services", "Сервисы", "zap", 30),
+]
+
+
 async def seed(demo: bool = False) -> dict[str, int]:
     created = {"countries": 0, "products": 0, "premium": 0}
     async with session_factory()() as session:
         await settings_service.ensure_defaults(session)
+        known = set((await session.scalars(select(Category.slug))).all())
+        for slug, title, icon, order in CATEGORIES:
+            if slug not in known:
+                session.add(Category(slug=slug, title=title, icon=icon, sort_order=order))
         by_code: dict[str, Country] = {
             c.code: c for c in (await session.scalars(select(Country))).all()
         }

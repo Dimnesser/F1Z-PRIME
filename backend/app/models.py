@@ -181,6 +181,7 @@ class Order(TimestampMixin, Base):
         UniqueConstraint("user_id", "idempotency_key", name="uq_orders_user_idempotency"),
         CheckConstraint("quantity > 0", name="ck_orders_quantity_positive"),
         Index("ix_orders_status_created", "status", "created_at"),
+        Index("ix_orders_paid_at", "paid_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -214,6 +215,7 @@ class Payment(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
         Index("ix_payments_status_created", "status", "created_at"),
+        Index("ix_payments_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -262,6 +264,7 @@ class SupportTicket(TimestampMixin, Base):
     status: Mapped[TicketStatus] = mapped_column(
         _enum(TicketStatus, "ticket_status"), default=TicketStatus.open, index=True, nullable=False
     )
+    assigned_to: Mapped[str | None] = mapped_column(String(64), index=True)
 
     user: Mapped[User] = relationship(lazy="joined")
     messages: Mapped[list[SupportMessage]] = relationship(
@@ -307,3 +310,63 @@ class Setting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class AdminRole(str, enum.Enum):
+    owner = "owner"
+    admin = "admin"
+    support = "support"
+
+
+class AdminUser(TimestampMixin, Base):
+    """Additional admin-panel accounts. The account from ADMIN_USERNAME/.env is always the owner."""
+
+    __tablename__ = "admin_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[AdminRole] = mapped_column(_enum(AdminRole, "admin_role"), default=AdminRole.support, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OrderEvent(Base):
+    """Order status history (who changed what and when)."""
+
+    __tablename__ = "order_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True, nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(32))
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(64), default="system", nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Category(TimestampMixin, Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(64), nullable=False)
+    icon: Mapped[str] = mapped_column(String(32), default="box", server_default="box", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=100, server_default="100", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+
+
+class NotificationOutbox(Base):
+    """Telegram notifications that failed to send; retried by the background worker."""
+
+    __tablename__ = "notification_outbox"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending", index=True, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    last_error: Mapped[str] = mapped_column(String(255), default="", server_default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models import (
     Order,
+    OrderEvent,
     OrderStatus,
     Payment,
     PaymentStatus,
@@ -21,6 +22,7 @@ from app.models import (
     User,
 )
 from app.security import TelegramUser
+from app.services import settings as settings_service
 from app.services.common import ServiceError, change_balance, lock, money, utcnow
 
 log = logging.getLogger("f1z.orders")
@@ -44,6 +46,21 @@ STATUS_LABELS = {
     OrderStatus.expired: "Истёк",
     OrderStatus.refunded: "Возврат",
 }
+
+
+def add_event(
+    session: AsyncSession, order: Order, to_status: OrderStatus, actor: str, from_status: OrderStatus | None = None,
+    note: str | None = None,
+) -> None:
+    session.add(
+        OrderEvent(
+            order_id=order.id,
+            from_status=from_status.value if from_status else None,
+            to_status=to_status.value,
+            actor=actor[:64],
+            note=note,
+        )
+    )
 
 
 async def upsert_user(session: AsyncSession, tg: TelegramUser) -> User:
@@ -87,6 +104,7 @@ async def create_order(
         raise ServiceError("Укажите товар")
     if not 1 <= quantity <= 10:
         raise ServiceError("Количество должно быть от 1 до 10")
+    await settings_service.ensure_open(session)
 
     locked_user = await lock(session, User, user.id)  # serialises orders of one user
     assert locked_user is not None
@@ -138,6 +156,7 @@ async def create_order(
     )
     session.add(order)
     await session.flush()
+    add_event(session, order, OrderStatus.pending, f"user:{user.telegram_id}")
     log.info("order %s created by user %s total=%s", order.id, user.telegram_id, order.total)
     return order, True
 
@@ -153,13 +172,14 @@ async def _release_items(session: AsyncSession, order: Order) -> None:
             number.status = PremiumStatus.available
 
 
-async def mark_paid(session: AsyncSession, order: Order, method: str) -> None:
+async def mark_paid(session: AsyncSession, order: Order, method: str, actor: str = "payment") -> None:
     """Called only from payment confirmation, with `order` locked."""
     if order.status != OrderStatus.pending:
         raise ServiceError("Заказ не ожидает оплаты", 409, "bad_status")
     order.status = OrderStatus.paid
     order.payment_method = method
     order.paid_at = utcnow()
+    add_event(session, order, OrderStatus.paid, actor, OrderStatus.pending, note=f"Оплата: {method}")
     user = await lock(session, User, order.user_id)
     assert user is not None
     user.total_spent = money(user.total_spent) + money(order.total)
@@ -171,6 +191,14 @@ async def mark_paid(session: AsyncSession, order: Order, method: str) -> None:
             order.delivery_data = f"Ваш номер: {number.number}"
             order.status = OrderStatus.completed
             order.completed_at = utcnow()
+            add_event(session, order, OrderStatus.completed, "auto", OrderStatus.paid, note="Номер выдан автоматически")
+    elif order.product_id and await settings_service.get_bool(session, "auto_complete_digital"):
+        product = await session.get(Product, order.product_id)
+        if product is not None and product.category == "digital" and product.delivery_note.strip():
+            order.delivery_data = product.delivery_note
+            order.status = OrderStatus.completed
+            order.completed_at = utcnow()
+            add_event(session, order, OrderStatus.completed, "auto", OrderStatus.paid, note="Автозавершение цифрового товара")
 
 
 async def change_status(
@@ -180,6 +208,7 @@ async def change_status(
     *,
     delivery_data: str | None = None,
     admin_note: str | None = None,
+    actor: str = "system",
 ) -> Order:
     order = await lock(session, Order, order_id)
     if order is None:
@@ -208,6 +237,7 @@ async def change_status(
     if admin_note is not None:
         order.admin_note = admin_note
     order.status = new_status
+    add_event(session, order, new_status, actor, old, note=admin_note or None)
     return order
 
 
@@ -232,7 +262,7 @@ async def cancel_by_user(session: AsyncSession, user: User, order_id: int) -> Or
     )
     if awaiting:
         raise ServiceError("Платёж уже на проверке у администратора", 409, "payment_in_review")
-    return await change_status(session, order_id, OrderStatus.cancelled)
+    return await change_status(session, order_id, OrderStatus.cancelled, actor=f"user:{user.telegram_id}")
 
 
 async def expire_stale_orders(session: AsyncSession) -> int:
@@ -251,6 +281,6 @@ async def expire_stale_orders(session: AsyncSession) -> int:
     for oid in ids:
         order = await lock(session, Order, oid)
         if order is not None and order.status == OrderStatus.pending:
-            await change_status(session, oid, OrderStatus.expired)
+            await change_status(session, oid, OrderStatus.expired, actor="auto:expiry")
             count += 1
     return count

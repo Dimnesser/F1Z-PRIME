@@ -34,6 +34,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-f1z}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-f1z}
+    volumes:
+      - backups:/srv/backups
     depends_on:
       db: { condition: service_healthy }
     healthcheck:
@@ -81,5 +83,6 @@ services:
 
 volumes:
   pgdata:
+  backups:
   caddy_data:
   caddy_config:
