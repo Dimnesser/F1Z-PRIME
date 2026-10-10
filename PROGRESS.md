@@ -70,3 +70,6 @@
 - Tests: 77 passed (8 new in tests/test_miniapp_admin.py). E2E with the real telegram-web-app.js: owner sees
   the button, panel opens without login form, token only in sessionStorage, no JWT in any URL, back to shop
   keeps the session; regular user: no button, /admin/ → «Нет доступа», admin API 401, exchange 403.
+- Deployed to vps4: DEPLOYED_COMMIT `97a99e9` (feature in `0e09c04` + CSP quoting). Backups:
+  `/root/f1z-backup/db-20261010-174445.sql.gz`, `db-20261010-174755.sql.gz` + code archives. Migration 0003 applied,
+  data kept (users 3, orders 3, products 8); owner token exchange OK, non-admin 403, forged 401, bot polling, no API errors.
