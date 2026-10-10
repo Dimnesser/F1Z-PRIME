@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-please-use-a-long-random-string"
     admin_username: str = "admin"
     admin_password: str = ""  # plain (dev) — prefer ADMIN_PASSWORD_HASH in production
-    admin_password_hash: str = ""  # pbkdf2_sha256$iterations$salt$hash
+    admin_password_hash: str = ""  # pbkdf2_sha256:iterations:salt:hash
     admin_token_ttl_hours: int = 12
 
     init_data_ttl_seconds: int = 86400
