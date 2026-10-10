@@ -44,4 +44,10 @@
   payment, support reply, maintenance on→503→off, store settings in public config;
   no page errors, no horizontal scroll on mobile.
 
-## Stage 4 — Deploy to vps4 ⏳
+## Stage 4 — Deploy to vps4 ⛔ not done
+- vps4 reachable; containers healthy; DB backup made: `/root/f1z-backup/db-20261010-171134.sql.gz` (pg_dump, 12 tables).
+- Blocked: the repository is private, so the server cannot `git clone` it, and uploading the code
+  archive from the agent environment was not permitted. Production still runs the previous version.
+- To finish: give the server read access to the repo (deploy key or read-only token), or allow the
+  upload, then run `/root/f1z/f1z-deploy-v2.sh` (backup → sync code keeping .env → rebuild api+web;
+  migration 0002 applies automatically on API start).
