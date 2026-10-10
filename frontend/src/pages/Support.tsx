@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sheet } from '../components/Sheet'
 import { useToast } from '../components/Toast'
-import { Badge, Button, EmptyState, PageTitle, Skeleton, stagger } from '../components/ui'
+import { Badge, Button, EmptyState, PageTitle, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { date } from '../lib/format'
 import { useConfig } from '../lib/queries'
@@ -54,9 +54,9 @@ export default function Support() {
       ) : !data?.length ? (
         <EmptyState icon={<Headphones className="h-7 w-7" />} title="Обращений нет" text="Если возник вопрос — напишите нам, мы поможем" />
       ) : (
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="space-y-3">
+        <motion.div className="stagger space-y-3">
           {data.map((t) => (
-            <motion.button key={t.id} variants={stagger.item} whileTap={{ scale: 0.98 }} onClick={() => navigate(`/support/${t.id}`)} className="card flex w-full items-center gap-3 p-4 text-left">
+            <motion.button key={t.id} whileTap={{ scale: 0.98 }} onClick={() => navigate(`/support/${t.id}`)} className="card flex w-full items-center gap-3 p-4 text-left">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-bold">{t.subject}</div>
                 <div className="mt-0.5 text-[12px] text-muted">#{t.id} · {date(t.updated_at)}</div>

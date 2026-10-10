@@ -4,7 +4,7 @@ import { ChevronRight, Package } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { StatusBadge } from '../components/StatusBadge'
-import { Button, EmptyState, PageTitle, Skeleton, stagger } from '../components/ui'
+import { Button, EmptyState, PageTitle, Skeleton } from '../components/ui'
 import { date, money } from '../lib/format'
 import { useOrders } from '../lib/queries'
 import { haptic } from '../lib/telegram'
@@ -44,11 +44,10 @@ export default function Orders() {
           action={<Button size="md" onClick={() => navigate('/catalog')}>Перейти в каталог</Button>}
         />
       ) : (
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="space-y-3">
+        <motion.div className="stagger space-y-3">
           {list.map((o) => (
             <motion.button
               key={o.id}
-              variants={stagger.item}
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate(`/orders/${o.id}`)}
               className="card flex w-full items-center gap-3.5 p-4 text-left"

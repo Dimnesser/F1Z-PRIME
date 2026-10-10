@@ -24,7 +24,7 @@ export default function ProductPage() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-muted pressable">
         <ArrowLeft className="h-4 w-4" /> Назад
       </button>
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[32px] bg-brand-soft p-6 text-center ring-1 ring-white/10">
+      <motion.div className="fade-in relative overflow-hidden rounded-[32px] bg-brand-soft p-6 text-center ring-1 ring-white/10">
         <div className="pointer-events-none absolute left-1/2 top-6 h-40 w-40 -translate-x-1/2 rounded-full bg-primary/30 blur-3xl" />
         <div className="relative mx-auto grid h-28 w-28 animate-float place-items-center rounded-[32px] bg-white/[0.06] text-[64px] ring-1 ring-white/15 backdrop-blur">
           {p.country?.flag ?? '📦'}

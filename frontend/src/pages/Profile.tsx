@@ -4,7 +4,7 @@ import { ArrowDownLeft, ArrowUpRight, CalendarDays, ChevronRight, Copy, Headphon
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { useToast } from '../components/Toast'
-import { Badge, Button, Skeleton, stagger } from '../components/ui'
+import { Badge, Button, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { date, money, shortDate, TX_LABEL } from '../lib/format'
 import { useConfig, useMe } from '../lib/queries'
@@ -22,7 +22,7 @@ export default function Profile() {
 
   return (
     <div className="space-y-5">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[32px] bg-brand-soft p-5 text-center ring-1 ring-white/10">
+      <motion.div className="fade-in relative overflow-hidden rounded-[32px] bg-brand-soft p-5 text-center ring-1 ring-white/10">
         <div className="pointer-events-none absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 rounded-full bg-primary/30 blur-3xl" />
         <div className="relative mx-auto w-fit"><Avatar me={me} size={84} /></div>
         <div className="relative mt-3 font-display text-xl font-bold">{[me.first_name, me.last_name].filter(Boolean).join(' ') || 'Пользователь'}</div>
@@ -48,13 +48,13 @@ export default function Profile() {
         <Button className="mt-4 w-full" size="md" onClick={topup}><Plus className="h-4 w-4" strokeWidth={3} /> Пополнить баланс</Button>
       </div>
 
-      <motion.div variants={stagger.container} initial="hidden" animate="show" className="grid grid-cols-3 gap-2.5">
+      <motion.div className="stagger grid grid-cols-3 gap-2.5">
         {[
           { icon: ShoppingCart, label: 'Покупок', value: String(me.orders_count) },
           { icon: Wallet, label: 'Потрачено', value: money(me.total_spent) },
           { icon: CalendarDays, label: 'С нами с', value: shortDate(me.created_at).replace(' г.', '') },
         ].map(({ icon: Icon, label, value }) => (
-          <motion.div key={label} variants={stagger.item} className="card p-3.5">
+          <motion.div key={label} className="card p-3.5">
             <Icon className="h-[18px] w-[18px] text-primary-soft" />
             <div className="mt-2 text-[11px] font-semibold text-muted">{label}</div>
             <div className="mt-0.5 text-[13.5px] font-bold leading-tight">{value}</div>

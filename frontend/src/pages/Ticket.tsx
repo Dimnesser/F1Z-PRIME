@@ -46,7 +46,7 @@ export default function Ticket() {
       </div>
       <div className="flex-1 space-y-2.5">
         {t.messages.map((m) => (
-          <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={clsx('flex', m.is_admin ? 'justify-start' : 'justify-end')}>
+          <div key={m.id} className={clsx('fade-in flex', m.is_admin ? 'justify-start' : 'justify-end')}>
             <div className={clsx('max-w-[82%] rounded-3xl px-4 py-2.5 text-[14px] leading-relaxed', m.is_admin ? 'rounded-bl-lg bg-card ring-1 ring-white/[0.07]' : 'rounded-br-lg bg-brand text-white')}>
               {m.is_admin && <div className="mb-0.5 flex items-center gap-1 text-[11px] font-bold text-secondary"><ShieldCheck className="h-3 w-3" /> Поддержка</div>}
               <div className="whitespace-pre-line break-words">{m.text}</div>
@@ -54,7 +54,7 @@ export default function Ticket() {
                 {new Date(m.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
         <div ref={bottom} />
       </div>

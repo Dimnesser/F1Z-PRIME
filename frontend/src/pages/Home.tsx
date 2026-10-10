@@ -4,7 +4,7 @@ import { ArrowRight, Gem, Globe2, Headphones, ShieldCheck, Sparkles, Undo2, Zap 
 import { useNavigate } from 'react-router-dom'
 import { PremiumCard, ProductMini } from '../components/Cards'
 import { TopBar } from '../components/TopBar'
-import { SectionHeader, Skeleton, stagger } from '../components/ui'
+import { SectionHeader, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { money } from '../lib/format'
 import { useConfig, useCountries, usePremium } from '../lib/queries'
@@ -26,10 +26,7 @@ export default function Home() {
 
       {/* Banner */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.05 }}
-        className="relative overflow-hidden rounded-[30px] bg-brand p-[1.5px] shadow-glow"
+        className="fade-in relative overflow-hidden rounded-[30px] bg-brand p-[1.5px] shadow-glow"
       >
         <div className="relative overflow-hidden rounded-[29px] bg-[radial-gradient(120%_120%_at_0%_0%,#2a1858_0%,#120f2a_45%,#0b1a24_100%)] p-5">
           <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 animate-spin-slow rounded-full bg-[conic-gradient(from_0deg,rgba(139,92,246,0.5),rgba(34,211,238,0.4),transparent,rgba(139,92,246,0.5))] opacity-60 blur-2xl" />
@@ -89,7 +86,7 @@ export default function Home() {
       {/* Popular */}
       <section>
         <SectionHeader title="🔥 Популярное" action="Все" onAction={() => navigate('/catalog')} />
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar">
+        <motion.div className="stagger -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar">
           {popLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="h-[150px] w-[156px] shrink-0 rounded-3xl" />)}
           {popular?.map((p) => <ProductMini key={p.id} p={p} onOpen={() => navigate(`/product/${p.id}`)} />)}
         </motion.div>
@@ -118,7 +115,7 @@ export default function Home() {
       {/* Premium */}
       <section>
         <SectionHeader title="💎 Красивые номера" action="Все" onAction={() => navigate('/numbers')} />
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar">
+        <motion.div className="stagger -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 no-scrollbar">
           {pLoading && [0, 1].map((i) => <Skeleton key={i} className="h-[200px] w-[250px] shrink-0 rounded-3xl" />)}
           {premium?.slice(0, 6).map((n) => <PremiumCard key={n.id} n={n} onOpen={() => navigate(`/number/${n.id}`)} />)}
           {premium && premium.length === 0 && <div className="card w-full p-5 text-sm text-muted">Скоро здесь появятся красивые номера ✨</div>}

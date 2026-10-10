@@ -3,12 +3,11 @@ import { motion } from 'framer-motion'
 import { ChevronRight, Gem, Package } from 'lucide-react'
 import { money } from '../lib/format'
 import type { CountryCatalog, PremiumNumber, Product } from '../lib/types'
-import { stagger } from './ui'
 
 export function CountryCard({ c, onBuy, onOpen }: { c: CountryCatalog; onBuy: () => void; onOpen: () => void }) {
   const inStock = c.stock > 0 && c.product_id !== null
   return (
-    <motion.div variants={stagger.item} className="card group relative overflow-hidden p-4" onClick={onOpen}>
+    <motion.div className="card group relative overflow-hidden p-4" onClick={onOpen}>
       <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-primary/10 blur-2xl transition group-active:bg-primary/20" />
       <div className="flex items-center gap-3.5">
         <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/[0.05] text-[32px] ring-1 ring-white/10">
@@ -61,7 +60,6 @@ const TIER_STYLE: Record<string, string> = {
 export function PremiumCard({ n, onOpen, wide = false }: { n: PremiumNumber; onOpen: () => void; wide?: boolean }) {
   return (
     <motion.button
-      variants={stagger.item}
       whileTap={{ scale: 0.97 }}
       onClick={onOpen}
       className={clsx('relative shrink-0 overflow-hidden rounded-3xl bg-gradient-to-br p-[1.5px] text-left', TIER_STYLE[n.tier] ?? TIER_STYLE.premium, wide ? 'w-full' : 'w-[250px]')}
@@ -95,7 +93,6 @@ export function PremiumCard({ n, onOpen, wide = false }: { n: PremiumNumber; onO
 export function ProductMini({ p, onOpen }: { p: Product; onOpen: () => void }) {
   return (
     <motion.button
-      variants={stagger.item}
       whileTap={{ scale: 0.96 }}
       onClick={onOpen}
       className="card relative w-[156px] shrink-0 overflow-hidden p-3.5 text-left"

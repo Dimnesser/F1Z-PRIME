@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { Boxes, CreditCard, Gem, Headphones, ShoppingCart, TrendingUp, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge, ORDER_STATUS, PageHead, Skeleton, UserCell } from '../components/ui'
@@ -28,13 +27,13 @@ export default function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {loading && [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-3xl" />)}
         {stats.map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="card relative overflow-hidden p-5">
+          <div key={s.label} style={{ animationDelay: `${i * 50}ms` }} className="fade-in card relative overflow-hidden p-5 [animation-fill-mode:backwards]">
             <div className={`absolute -right-6 -top-6 h-28 w-28 rounded-full bg-gradient-to-br ${s.tint} blur-2xl`} />
             <div className={`relative grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br ${s.tint}`}><s.icon className="h-5 w-5" /></div>
             <div className="relative mt-4 text-[12px] font-semibold uppercase tracking-wider text-muted">{s.label}</div>
             <div className="relative mt-1 font-display text-2xl font-bold">{s.value}</div>
             {s.sub && <div className="relative text-xs text-muted">{s.sub}</div>}
-          </motion.div>
+          </div>
         ))}
       </div>
 
@@ -56,7 +55,7 @@ export default function Dashboard() {
             {d?.daily.map((x) => (
               <div key={x.date} className="group flex max-w-[72px] flex-1 flex-col items-center gap-2">
                 <div className="relative w-full flex-1">
-                  <motion.div initial={{ height: 0 }} animate={{ height: `${(x.revenue / max) * 100}%` }} className="absolute bottom-0 w-full rounded-lg bg-brand opacity-80 group-hover:opacity-100" />
+                  <div style={{ height: `${(x.revenue / max) * 100}%` }} className="absolute bottom-0 w-full rounded-lg bg-brand opacity-80 transition-[height] duration-500 group-hover:opacity-100" />
                   <div className="absolute -top-7 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-2 py-1 text-[11px] font-bold group-hover:block">{money(x.revenue)}</div>
                 </div>
                 <span className="text-[10px] text-muted">{x.date.slice(8, 10)}.{x.date.slice(5, 7)}</span>

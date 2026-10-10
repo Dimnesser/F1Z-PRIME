@@ -80,9 +80,7 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
 export function EmptyState({ icon, title, text, action }: { icon: ReactNode; title: string; text?: string; action?: ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="card flex flex-col items-center px-6 py-10 text-center"
+      className="fade-in card flex flex-col items-center px-6 py-10 text-center"
     >
       <div className="mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-brand-soft text-primary-soft ring-1 ring-white/10">
         {icon}
@@ -106,7 +104,3 @@ export function PageTitle({ title, subtitle, right }: { title: string; subtitle?
   )
 }
 
-export const stagger = {
-  container: { hidden: {}, show: { transition: { staggerChildren: 0.05 } } },
-  item: { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 30 } } },
-}

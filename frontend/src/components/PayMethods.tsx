@@ -37,14 +37,12 @@ export function PayMethods({
         return (
           <motion.button
             key={m}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
+            style={{ animationDelay: `${i * 50}ms` }}
             whileTap={{ scale: 0.98 }}
             disabled={loading !== null || notEnough}
             onClick={() => onPick(m)}
             className={clsx(
-              'flex w-full items-center gap-3.5 rounded-2xl border p-3.5 text-left transition',
+              'fade-in flex w-full items-center gap-3.5 rounded-2xl border p-3.5 text-left transition [animation-fill-mode:backwards]',
               m === 'test' ? 'border-dashed border-warning/40 bg-warning/[0.04]' : 'border-white/[0.07] bg-card',
               notEnough && 'opacity-50',
             )}

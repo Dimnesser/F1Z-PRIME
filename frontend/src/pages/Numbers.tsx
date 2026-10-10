@@ -4,7 +4,7 @@ import { Gem } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PremiumCard } from '../components/Cards'
-import { EmptyState, PageTitle, Skeleton, stagger } from '../components/ui'
+import { EmptyState, PageTitle, Skeleton } from '../components/ui'
 import { usePremium } from '../lib/queries'
 import { haptic } from '../lib/telegram'
 
@@ -49,7 +49,7 @@ export default function Numbers() {
       ) : list.length === 0 ? (
         <EmptyState icon={<Gem className="h-7 w-7" />} title="Пока пусто" text="Новые красивые номера появятся совсем скоро" />
       ) : (
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="space-y-3">
+        <motion.div className="stagger space-y-3">
           {list.map((n) => <PremiumCard key={n.id} n={n} wide onOpen={() => navigate(`/number/${n.id}`)} />)}
         </motion.div>
       )}

@@ -24,7 +24,7 @@ export default function NumberPage() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-muted pressable">
         <ArrowLeft className="h-4 w-4" /> Назад
       </button>
-      <motion.div initial={{ opacity: 0, rotateX: 12, y: 20 }} animate={{ opacity: 1, rotateX: 0, y: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 22 }} className="rounded-[32px] bg-brand p-[1.5px] shadow-glow">
+      <motion.div className="fade-in rounded-[32px] bg-brand p-[1.5px] shadow-glow">
         <div className="relative overflow-hidden rounded-[31px] bg-[radial-gradient(120%_120%_at_100%_0%,#2b1a5c_0%,#13112a_50%,#0a1720_100%)] p-6">
           <div className="pointer-events-none absolute -left-10 -top-10 h-44 w-44 animate-spin-slow rounded-full bg-[conic-gradient(rgba(139,92,246,0.45),rgba(34,211,238,0.35),transparent)] blur-2xl" />
           <div className="relative flex items-center justify-between">

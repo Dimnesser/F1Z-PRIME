@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect } from 'react'
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { BottomNav } from './components/BottomNav'
@@ -40,17 +39,9 @@ export default function App() {
 
   return (
     <div className="relative z-10 mx-auto min-h-screen max-w-lg">
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.main
-          key={location.pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.22, ease: 'easeOut' }}
-          className="pb-nav px-4"
-          style={{ paddingTop: 'calc(var(--safe-top) + 16px)' }}
-        >
-          <Routes location={location}>
+      {/* No exit-animation gate between tabs: the new page always mounts immediately. */}
+      <main key={location.pathname} className="fade-in pb-nav px-4" style={{ paddingTop: 'calc(var(--safe-top) + 16px)' }}>
+        <Routes location={location}>
             <Route path="/" element={<Home />} />
             <Route path="/catalog" element={<Catalog />} />
             <Route path="/numbers" element={<Numbers />} />
@@ -63,8 +54,7 @@ export default function App() {
             <Route path="/number/:id" element={<NumberPage />} />
             <Route path="*" element={<Home />} />
           </Routes>
-        </motion.main>
-      </AnimatePresence>
+      </main>
       <BottomNav />
     </div>
   )

@@ -5,7 +5,7 @@ import { Search, SearchX } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CountryCard, ProductMini } from '../components/Cards'
-import { EmptyState, PageTitle, SectionHeader, Skeleton, stagger } from '../components/ui'
+import { EmptyState, PageTitle, SectionHeader, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { useCountries } from '../lib/queries'
 import { useShop } from '../lib/shop'
@@ -72,7 +72,7 @@ export default function Catalog() {
       ) : list.length === 0 ? (
         <EmptyState icon={<SearchX className="h-7 w-7" />} title="Ничего не найдено" text="Попробуйте изменить запрос или фильтр" />
       ) : (
-        <motion.div variants={stagger.container} initial="hidden" animate="show" className="space-y-3">
+        <motion.div className="stagger space-y-3">
           {list.map((c) => (
             <CountryCard
               key={c.id}
@@ -87,7 +87,7 @@ export default function Catalog() {
       {others.length > 0 && (
         <section className="mt-7">
           <SectionHeader title="✨ Цифровые товары" />
-          <motion.div variants={stagger.container} initial="hidden" animate="show" className="-mx-4 flex gap-3 overflow-x-auto px-4 no-scrollbar">
+          <motion.div className="stagger -mx-4 flex gap-3 overflow-x-auto px-4 no-scrollbar">
             {others.map((p) => <ProductMini key={p.id} p={p} onOpen={() => navigate(`/product/${p.id}`)} />)}
           </motion.div>
         </section>

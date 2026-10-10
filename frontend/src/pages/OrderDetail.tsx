@@ -53,7 +53,7 @@ export default function OrderDetail() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-muted pressable">
         <ArrowLeft className="h-4 w-4" /> Назад
       </button>
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card overflow-hidden">
+      <motion.div className="fade-in card overflow-hidden">
         <div className="bg-brand-soft p-5">
           <div className="flex items-center justify-between">
             <span className="font-display text-sm font-semibold text-muted">Заказ #{o.id}</span>

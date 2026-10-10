@@ -160,7 +160,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
       </div>
 
       {step === 'confirm' && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+        <motion.div className="fade-in space-y-4">
           {item.kind === 'product' && (
             <div className="flex items-center justify-between rounded-2xl bg-card p-3.5 ring-1 ring-white/[0.06]">
               <span className="text-sm font-semibold text-muted">Количество</span>
@@ -190,7 +190,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
       )}
 
       {step === 'pay' && order && (
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+        <motion.div className="fade-in space-y-4">
           <div className="flex items-center justify-between px-1">
             <span className="text-sm text-muted">К оплате</span>
             <span className="font-display text-2xl font-bold">{money(order.total)}</span>
@@ -221,7 +221,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
       )}
 
       {step === 'success' && order && (
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="space-y-4 py-2 text-center">
+        <motion.div className="fade-in space-y-4 py-2 text-center">
           <div className="relative mx-auto grid h-20 w-20 place-items-center">
             <div className="absolute inset-0 animate-ping rounded-full bg-success/20" />
             <div className="relative grid h-20 w-20 place-items-center rounded-full bg-success/15 text-success ring-1 ring-success/30">
