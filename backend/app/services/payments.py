@@ -237,6 +237,12 @@ async def confirm_payment(
                 f"Зачисление: оплата заказа #{payment.order_id} поступила после его закрытия",
                 order_id=payment.order_id, payment_id=payment.id,
             )
+            from app.services import incidents
+
+            await incidents.open_incident(
+                session, "late_payment", f"Оплата закрытого заказа #{payment.order_id} зачислена на баланс",
+                order_id=payment.order_id, payment_id=payment.id, dedupe_key=f"late_payment:{payment.id}",
+            )
     await session.flush()
     log.info("payment %s confirmed by %s", payment.id, actor)
     return payment, True
@@ -289,9 +295,24 @@ async def process_stars_payment(
     payment = await session.scalar(select(Payment).where(Payment.payload == payload))
     if payment is None:
         log.error("stars payment with unknown payload %s charge %s", payload, charge_id)
+        from app.services import incidents
+
+        await incidents.open_incident(
+            session, "stars_unknown", "Stars-платёж без счёта в базе", severity="critical",
+            details={"charge_id": charge_id, "amount": total_amount, "telegram_id": telegram_id},
+            dedupe_key=f"stars_unknown:{charge_id}",
+        )
         return None, False
     if currency != "XTR" or total_amount != payment.stars_amount or payment.user.telegram_id != telegram_id:
         log.error("stars payment mismatch payload=%s charge=%s", payload, charge_id)
         payment.admin_comment = f"Несовпадение суммы/пользователя. charge_id={charge_id}, amount={total_amount}"
+        from app.services import incidents
+
+        await incidents.open_incident(
+            session, "stars_mismatch", f"Stars-платёж #{payment.id}: не совпала сумма, валюта или покупатель",
+            severity="critical", order_id=payment.order_id, payment_id=payment.id,
+            details={"charge_id": charge_id, "amount": total_amount, "expected": payment.stars_amount, "currency": currency},
+            dedupe_key=f"stars_mismatch:{charge_id}",
+        )
         return payment, False
     return await confirm_payment(session, payment.id, actor="telegram_stars", external_id=charge_id)

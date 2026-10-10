@@ -86,7 +86,7 @@ async def test_admin_product_crud(client, admin_headers):
     )
     assert r.status_code == 201
     pid = r.json()["id"]
-    r = await client.patch(f"/api/admin/products/{pid}", json={"stock": 7, "status": "hidden"}, headers=admin_headers)
+    r = await client.patch(f"/api/admin/products/{pid}", json={"stock": 7, "stock_reason": "приход", "status": "hidden"}, headers=admin_headers)
     assert r.json()["stock"] == 7 and r.json()["status"] == "hidden"
     assert (await client.get(f"/api/products/{pid}")).status_code == 404  # hidden
     r = await client.post("/api/admin/products", json={"title": "x", "price": "-1"}, headers=admin_headers)
@@ -130,7 +130,8 @@ async def test_client_cannot_set_price(client, user_headers):
 
 async def test_out_of_stock(client, user_headers, admin_headers):
     pid = await _product_id(client)
-    await client.patch(f"/api/admin/products/{pid}", json={"stock": 1}, headers=admin_headers)
+    r = await client.patch(f"/api/admin/products/{pid}", json={"stock": 1, "stock_reason": "пересчёт"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
     r = await client.post("/api/orders", json={"product_id": pid, "quantity": 2, "idempotency_key": "stock-001"},
                           headers=user_headers)
     assert r.status_code == 409
@@ -157,7 +158,9 @@ async def test_balance_payment(client, user_headers, admin_headers):
                           headers=admin_headers)
     assert r.json()["balance"] == 100
     r = await client.post(f"/api/orders/{order['id']}/pay", json={"method": "balance"}, headers=user_headers)
-    assert r.status_code == 200 and r.json()["order"]["status"] == "paid"
+    # default products are delivered by an operator: paid → handed over to the manual queue right away
+    assert r.status_code == 200 and r.json()["order"]["status"] == "processing"
+    assert r.json()["order"]["stage"] == "manual_review" and r.json()["order"]["fulfillment_status"] == "manual"
     me = (await client.get("/api/me", headers=user_headers)).json()
     assert me["balance"] == 40 and me["orders_count"] == 1 and me["total_spent"] == 60
     # second payment attempt must fail — no double charge
@@ -192,7 +195,10 @@ async def test_manual_payment_flow(client, user_headers, admin_headers, telegram
     r = await client.post(f"/api/admin/payments/{pay['id']}/confirm", json={}, headers=admin_headers)
     assert r.status_code == 409  # no double processing
     detail = (await client.get(f"/api/orders/{order['id']}", headers=user_headers)).json()
-    assert detail["status"] == "paid" and detail["payments"][0]["status"] == "confirmed"
+    assert detail["status"] == "processing" and detail["payments"][0]["status"] == "confirmed"
+    from app.worker import run_jobs
+
+    await run_jobs()  # notifications are delivered by the worker queue
     assert any(m == "sendMessage" for m, _ in telegram_calls)
 
 

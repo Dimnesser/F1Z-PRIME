@@ -15,9 +15,12 @@ from app.models import (
     BalanceTransaction,
     Category,
     Country,
+    InventoryItem,
     Order,
+    OrderStatus,
     Payment,
     PaymentMethod,
+    PaymentStatus,
     PremiumNumber,
     PremiumStatus,
     Product,
@@ -33,6 +36,7 @@ from app.schemas import (
     OrderCreate,
     OrderDetailOut,
     OrderOut,
+    OrderSupportCreate,
     PaymentOut,
     PayRequest,
     PayResponse,
@@ -48,7 +52,8 @@ from app.schemas import (
 from app.services import orders as order_service
 from app.services import payments as payment_service
 from app.services import settings as settings_service
-from app.services import monitor, telegram
+from app.services import fulfillment, inventory, monitor, notifications
+from app.services import support as support_service
 from app.services.common import utcnow
 
 router = APIRouter(prefix="/api", tags=["miniapp"])
@@ -230,11 +235,10 @@ async def me(user: UserDep) -> object:
 @router.get("/me/admin-access")
 async def my_admin_access(user: UserDep, session: SessionDep) -> dict:
     """Whether to show the «Админ-панель» button. Decided on the server from the Telegram id in signed initData."""
-    from app.services.admin_access import MINIAPP_ROLES, telegram_role
+    from app.services.admin_access import telegram_access
 
-    role = await telegram_role(session, user.telegram_id)
-    allowed = role in MINIAPP_ROLES
-    return {"allowed": allowed, "role": role if allowed else None}
+    role, _ = await telegram_access(session, user.telegram_id)
+    return {"allowed": role is not None, "role": role}
 
 
 @router.get("/me/transactions", response_model=list[TransactionOut])
@@ -267,12 +271,9 @@ async def create_order(body: OrderCreate, user: UserDep, session: SessionDep) ->
         premium_number_id=body.premium_number_id,
         quantity=body.quantity,
     )
-    await session.commit()
     if created:
-        await telegram.notify_admins(
-            f"🆕 Новый заказ #{order.id}\n{order.item_title} × {order.quantity}\nСумма: {order.total} грн",
-            kind="orders",
-        )
+        await notifications.notify_customer(session, order, "order_created")  # off by default (template switch)
+    await session.commit()
     return order
 
 
@@ -286,8 +287,26 @@ async def _order_detail(session: SessionDep, order: Order) -> OrderDetailOut:
     payments = (await session.scalars(select(Payment).where(Payment.order_id == order.id).order_by(Payment.id))).all()
     data = OrderDetailOut.model_validate(order, from_attributes=True)
     data.payments = [PaymentOut.model_validate(p, from_attributes=True) for p in payments]
+    review = any(p.status == PaymentStatus.awaiting_confirmation for p in payments)
+    data.stage = order_service.order_stage(order, payment_review=review)
     if order.product and order.status.value in ("paid", "processing", "completed"):
         data.delivery_note = order.product.delivery_note or None
+    # secrets are decrypted only for a delivered order of this buyer (never before confirmed payment)
+    if order.status == OrderStatus.completed and order.fulfillment_status == "delivered":
+        units = (
+            await session.scalars(
+                select(InventoryItem)
+                .where(InventoryItem.order_id == order.id, InventoryItem.status == "sold")
+                .order_by(InventoryItem.id)
+            )
+        ).all()
+        data.delivered_items = inventory.delivered_secrets(list(units))
+    data.support_ticket_id = await session.scalar(
+        select(SupportTicket.id)
+        .where(SupportTicket.order_id == order.id, SupportTicket.status != TicketStatus.closed)
+        .order_by(SupportTicket.id.desc())
+        .limit(1)
+    )
     return data
 
 
@@ -303,12 +322,10 @@ async def order_detail(order_id: int, user: UserDep, session: SessionDep) -> Ord
 async def pay_order(order_id: int, body: PayRequest, user: UserDep, session: SessionDep) -> PayResponse:
     result = await payment_service.start_order_payment(session, user, order_id, body.method)
     await session.commit()
+    if body.method in (PaymentMethod.balance, PaymentMethod.test):
+        # instant delivery right after the payment commit; the queued worker job is the durable fallback
+        await fulfillment.run_now(order_id)
     order = await session.get(Order, order_id, populate_existing=True)
-    if body.method in (PaymentMethod.balance, PaymentMethod.test) and order is not None:
-        await telegram.notify(user.telegram_id, f"✅ Заказ #{order.id} оплачен. Статус: {order.status.value}")
-        await telegram.notify_admins(
-            f"💰 Заказ #{order.id} оплачен ({body.method.value}) — {order.total} грн", kind="orders"
-        )
     return PayResponse(
         payment=PaymentOut.model_validate(result.payment, from_attributes=True),
         order=OrderOut.model_validate(order, from_attributes=True) if order else None,
@@ -349,12 +366,16 @@ async def payment_status(payment_id: int, user: UserDep, session: SessionDep) ->
 @router.post("/payments/{payment_id}/submit", response_model=PaymentOut)
 async def submit_manual(payment_id: int, body: ManualSubmit, user: UserDep, session: SessionDep) -> Payment:
     payment = await payment_service.submit_manual(session, user, payment_id, body.comment)
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    values = {
+        "payment_id": f"#{payment.id}", "price": f"{payment.amount} грн",
+        "order_no": (order.public_id or f"#{order.id}") if order else "пополнение баланса",
+        "reason": body.comment or "-", "customer_name": f"{user.telegram_id} @{user.username or '-'}",
+    }
+    if order is not None:
+        await notifications.notify_customer(session, order, "payment_review", dedupe=f"payment_review:{payment.id}")
+    await notifications.notify_staff(session, "staff_payment_review", values, dedupe=f"review:{payment.id}")
     await session.commit()
-    await telegram.notify_admins(
-        f"🧾 Ручной платёж #{payment.id} ожидает проверки: {payment.amount} грн\n"
-        f"Пользователь: {user.telegram_id} @{user.username or '-'}\nКомментарий: {body.comment or '-'}",
-        kind="payments",
-    )
     return payment
 
 
@@ -369,20 +390,23 @@ async def my_tickets(user: UserDep, session: SessionDep) -> list:
 
 @router.post("/support/tickets", response_model=TicketDetailOut, status_code=201)
 async def create_ticket(body: TicketCreate, user: UserDep, session: SessionDep) -> SupportTicket:
-    open_count = await session.scalar(
-        select(func.count(SupportTicket.id)).where(
-            SupportTicket.user_id == user.id, SupportTicket.status != TicketStatus.closed
-        )
-    )
-    if (open_count or 0) >= 5:
-        raise HTTPException(429, "У вас слишком много открытых обращений")
-    ticket = SupportTicket(user_id=user.id, subject=body.subject.strip())
-    ticket.messages.append(SupportMessage(is_admin=False, text=body.text.strip()))
-    session.add(ticket)
+    ticket = await support_service.create_ticket(session, user, body.subject, body.text, category=body.category)
     await session.commit()
-    await telegram.notify_admins(
-        f"🆘 Новое обращение #{ticket.id}: {ticket.subject}\n\n{body.text[:500]}", kind="tickets"
-    )
+    return await _load_ticket(session, ticket.id, user.id)
+
+
+@router.get("/support/categories")
+async def support_categories() -> list[dict]:
+    return [
+        {"key": k, "label": v, "text": support_service.DEFAULT_TEXT[k]} for k, v in support_service.CATEGORIES.items()
+    ]
+
+
+@router.post("/orders/{order_id}/support", response_model=TicketDetailOut, status_code=201)
+async def order_support(order_id: int, body: OrderSupportCreate, user: UserDep, session: SessionDep) -> SupportTicket:
+    """One tap from the order card: opens (or continues) a support ticket linked to this order."""
+    ticket = await support_service.ticket_for_order(session, user, order_id, body.category, body.text)
+    await session.commit()
     return await _load_ticket(session, ticket.id, user.id)
 
 
@@ -411,6 +435,8 @@ async def ticket_reply(ticket_id: int, body: MessageCreate, user: UserDep, sessi
     session.add(SupportMessage(ticket_id=ticket.id, is_admin=False, text=body.text.strip()))
     ticket.status = TicketStatus.open
     ticket.updated_at = utcnow()
+    await notifications.notify_staff(
+        session, "staff_new_ticket", {"ticket_id": f"#{ticket.id}", "reason": f"новое сообщение\n{body.text.strip()[:400]}"}
+    )
     await session.commit()
-    await telegram.notify_admins(f"💬 Сообщение в обращении #{ticket.id}:\n{body.text[:500]}", kind="tickets")
     return await _load_ticket(session, ticket_id, user.id)

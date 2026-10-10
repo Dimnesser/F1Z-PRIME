@@ -49,7 +49,7 @@ async def test_roles_and_accounts(client, admin_headers):
     assert (await client.put("/api/admin/settings", json={"values": {"shop_name": "X"}}, headers=support)).status_code == 403
     # promotion applies immediately; deactivation revokes the session
     await client.patch(f"/api/admin/accounts/{acc_id}", json={"role": "admin"}, headers=admin_headers)
-    assert (await client.patch(f"/api/admin/products/{pid}", json={"stock": 3}, headers=support)).status_code == 200
+    assert (await client.patch(f"/api/admin/products/{pid}", json={"stock": 3, "stock_reason": "пересчёт"}, headers=support)).status_code == 200
     assert (await client.get("/api/admin/accounts", headers=support)).status_code == 403  # owner only
     await client.patch(f"/api/admin/accounts/{acc_id}", json={"is_active": False}, headers=admin_headers)
     assert (await client.get("/api/admin/me", headers=support)).status_code == 401
@@ -151,7 +151,8 @@ async def test_order_detail_history_and_filters(client, admin_headers, user_head
                           headers=admin_headers)
     assert r.status_code == 200
     d = (await client.get(f"/api/admin/orders/{order['id']}", headers=admin_headers)).json()
-    assert [e["to_status"] for e in d["events"]] == ["pending", "paid", "completed"]
+    statuses = [e["to_status"] for e in d["events"]]
+    assert [x for i, x in enumerate(statuses) if i == 0 or statuses[i - 1] != x] == ["pending", "paid", "processing", "completed"]
     assert d["events"][-1]["actor"] == "admin:admin"
     assert d["allowed"] == ["refunded"] and len(d["payments"]) == 1
     r = (await client.get("/api/admin/orders?status=completed&method=balance", headers=admin_headers)).json()
@@ -226,7 +227,8 @@ async def test_maintenance_blocks_purchases(client, admin_headers, user_headers)
 
 async def test_auto_complete_digital(client, admin_headers, user_headers):
     r = await client.post("/api/admin/products", json={"title": "Ваучер", "price": "10", "stock": 5, "category": "digital",
-                                                        "delivery_note": "Код в личном кабинете"}, headers=admin_headers)
+                                                        "delivery_note": "Код в личном кабинете",
+                                                        "fulfillment_mode": "auto"}, headers=admin_headers)
     pid = r.json()["id"]
     await client.put("/api/admin/settings", json={"values": {"auto_complete_digital": "true"}}, headers=admin_headers)
     me = (await client.get("/api/me", headers=user_headers)).json()

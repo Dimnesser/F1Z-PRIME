@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     admin_telegram_ids: str = ""  # comma separated ids that receive notifications
 
     secret_key: str = "change-me-please-use-a-long-random-string"
+    # Key for encrypting inventory secrets (base64, 32 bytes). Derived from SECRET_KEY when empty.
+    inventory_key: str = ""
     admin_username: str = "admin"
     admin_password: str = ""  # plain (dev) — prefer ADMIN_PASSWORD_HASH in production
     admin_password_hash: str = ""  # pbkdf2_sha256:iterations:salt:hash

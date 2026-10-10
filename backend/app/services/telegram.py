@@ -12,7 +12,11 @@ log = logging.getLogger("f1z.telegram")
 
 
 class TelegramError(Exception):
-    pass
+    """api=True: Telegram answered with an error (not retryable as-is); False: network/transport failure."""
+
+    def __init__(self, message: str, api: bool = False) -> None:
+        super().__init__(message)
+        self.api = api
 
 
 def redact(text: object) -> str:
@@ -33,7 +37,7 @@ async def call(method: str, payload: dict[str, Any], timeout: float = 10.0) -> A
     except (httpx.HTTPError, ValueError) as exc:
         raise TelegramError(redact(exc)) from None
     if not data.get("ok"):
-        raise TelegramError(data.get("description", "Telegram API error"))
+        raise TelegramError(data.get("description", "Telegram API error"), api=True)
     return data["result"]
 
 

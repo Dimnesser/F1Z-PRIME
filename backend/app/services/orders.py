@@ -22,6 +22,7 @@ from app.models import (
     User,
 )
 from app.security import TelegramUser
+from app.services import inventory, jobs, notifications
 from app.services import settings as settings_service
 from app.services.common import ServiceError, change_balance, lock, money, utcnow
 
@@ -46,6 +47,42 @@ STATUS_LABELS = {
     OrderStatus.expired: "Истёк",
     OrderStatus.refunded: "Возврат",
 }
+
+
+STAGE_LABELS = {
+    "pending_payment": "Ожидает оплаты",
+    "payment_review": "Платёж на проверке",
+    "paid": "Оплачен",
+    "fulfillment_pending": "Ожидает выдачи",
+    "processing": "В обработке",
+    "delivered": "Выдан",
+    "manual_review": "Ручная проверка",
+    "failed": "Ошибка выдачи",
+    "cancelled": "Отменён",
+    "refunded": "Возврат",
+}
+
+
+def order_stage(order: Order, payment_review: bool = False) -> str:
+    """Explicit lifecycle stage shown to customers and staff, derived from the stored order + fulfillment status."""
+    st, fs = order.status, order.fulfillment_status
+    if st == OrderStatus.pending:
+        return "payment_review" if payment_review else "pending_payment"
+    if st in (OrderStatus.cancelled, OrderStatus.expired):
+        return "cancelled"
+    if st == OrderStatus.refunded:
+        return "refunded"
+    if st == OrderStatus.completed or fs == "delivered":
+        return "delivered"
+    if fs == "failed":
+        return "failed"
+    if fs in ("manual", "review"):
+        return "manual_review"
+    if fs == "processing":
+        return "processing"
+    if fs == "pending":
+        return "fulfillment_pending"
+    return "paid" if st == OrderStatus.paid else "processing"
 
 
 def add_event(
@@ -132,7 +169,7 @@ async def create_order(
             raise ServiceError("Недостаточно товара в наличии", 409, "out_of_stock")
         product.stock -= quantity
         title = product.title
-        unit_price = money(product.price)
+        unit_price = money(product.price)  # price always from the database, never from the client
     else:
         number = await lock(session, PremiumNumber, premium_number_id)  # type: ignore[arg-type]
         if number is None or number.status != PremiumStatus.available:
@@ -142,6 +179,25 @@ async def create_order(
         title = f"{number.title} {number.display_mask}"
         unit_price = money(number.price)
 
+    total = money(unit_price * quantity)
+    min_total = await settings_service.get_decimal(session, "min_order_total", "0")
+    max_total = await settings_service.get_decimal(session, "max_order_total", "0")
+    if min_total > 0 and total < min_total:
+        raise ServiceError(f"Минимальная сумма заказа — {min_total} грн", 422, "below_min")
+    if max_total > 0 and total > max_total:
+        raise ServiceError(f"Максимальная сумма заказа — {max_total} грн", 422, "above_max")
+    per_day = int(await settings_service.get_value(session, "max_items_per_user_day") or 0)
+    if per_day and product_id is not None:
+        bought = await session.scalar(
+            select(func.coalesce(func.sum(Order.quantity), 0)).where(
+                Order.user_id == user.id, Order.product_id == product_id,
+                Order.status.not_in([OrderStatus.cancelled, OrderStatus.expired, OrderStatus.refunded]),
+                Order.created_at > utcnow() - timedelta(days=1),
+            )
+        )
+        if (bought or 0) + quantity > per_day:
+            raise ServiceError(f"Лимит: не более {per_day} шт. этого товара в сутки", 429, "user_limit")
+
     order = Order(
         user_id=user.id,
         product_id=product_id,
@@ -149,23 +205,36 @@ async def create_order(
         item_title=title[:160],
         quantity=quantity,
         unit_price=unit_price,
-        total=money(unit_price * quantity),
+        total=total,
         status=OrderStatus.pending,
         idempotency_key=idempotency_key,
         expires_at=expires,
     )
     session.add(order)
     await session.flush()
+    order.public_id = f"F1Z-{order.id:06d}"
     add_event(session, order, OrderStatus.pending, f"user:{user.telegram_id}")
+    if product_id is not None:
+        if product.uses_inventory:
+            await inventory.reserve_units(session, product, order, quantity)
+        inventory.record(session, product, -quantity, "reserved", order_id=order.id, note=f"резерв заказа {order.public_id}")
+        add_event(session, order, OrderStatus.pending, "system", OrderStatus.pending, note="Товар зарезервирован")
     log.info("order %s created by user %s total=%s", order.id, user.telegram_id, order.total)
     return order, True
 
 
-async def _release_items(session: AsyncSession, order: Order) -> None:
+async def _release_items(session: AsyncSession, order: Order, reason: str = "released") -> None:
     if order.product_id:
         product = await lock(session, Product, order.product_id)
         if product is not None:
-            product.stock += order.quantity
+            if product.uses_inventory:
+                released = await inventory.release_units(session, order)
+                product.stock += released
+                if released:
+                    inventory.record(session, product, released, reason, order_id=order.id)
+            else:
+                product.stock += order.quantity
+                inventory.record(session, product, order.quantity, reason, order_id=order.id)
     if order.premium_number_id:
         number = await lock(session, PremiumNumber, order.premium_number_id)
         if number is not None and number.status in (PremiumStatus.reserved, PremiumStatus.sold):
@@ -190,15 +259,20 @@ async def mark_paid(session: AsyncSession, order: Order, method: str, actor: str
             number.status = PremiumStatus.sold
             order.delivery_data = f"Ваш номер: {number.number}"
             order.status = OrderStatus.completed
-            order.completed_at = utcnow()
+            order.completed_at = order.delivered_at = utcnow()
+            order.fulfillment_status = "delivered"
             add_event(session, order, OrderStatus.completed, "auto", OrderStatus.paid, note="Номер выдан автоматически")
-    elif order.product_id and await settings_service.get_bool(session, "auto_complete_digital"):
-        product = await session.get(Product, order.product_id)
-        if product is not None and product.category == "digital" and product.delivery_note.strip():
-            order.delivery_data = product.delivery_note
-            order.status = OrderStatus.completed
-            order.completed_at = utcnow()
-            add_event(session, order, OrderStatus.completed, "auto", OrderStatus.paid, note="Автозавершение цифрового товара")
+    else:
+        # delivery happens in the fulfillment job, created in the same transaction as the payment:
+        # if the payment commits, the job exists; a crash afterwards just delays delivery, never loses it.
+        order.fulfillment_status = "pending"
+        await jobs.enqueue(session, "fulfill", {"order_id": order.id}, dedupe_key=f"fulfill:{order.id}")
+    await notifications.notify_staff(
+        session, "staff_new_sale", notifications.order_values(order), dedupe=f"sale:{order.id}"
+    )
+    big = await settings_service.get_decimal(session, "big_order_threshold", "0")
+    if big > 0 and money(order.total) >= big:
+        await notifications.notify_staff(session, "staff_big_order", notifications.order_values(order), dedupe=f"big:{order.id}")
 
 
 async def change_status(
@@ -219,26 +293,58 @@ async def change_status(
         )
     old = order.status
     if new_status in (OrderStatus.cancelled, OrderStatus.expired):
-        await _release_items(session, order)
+        await _release_items(session, order, "expired" if new_status == OrderStatus.expired else "cancelled")
         await _cancel_open_payments(session, order.id)
     elif new_status == OrderStatus.refunded:
-        user = await lock(session, User, order.user_id)
-        assert user is not None
-        await change_balance(
-            session, user, money(order.total), TxType.refund, f"Возврат по заказу #{order.id}", order_id=order.id
-        )
-        user.total_spent = max(money(0), money(user.total_spent) - money(order.total))
-        if old != OrderStatus.completed:
-            await _release_items(session, order)
+        await refund_to_balance(session, order, actor=actor, reason=admin_note or "Возврат на баланс")
     elif new_status == OrderStatus.completed:
-        order.completed_at = utcnow()
+        order.completed_at = order.delivered_at = utcnow()
+        order.fulfillment_status = "delivered"
+        order.fulfillment_error = None
+        if order.product_id:
+            product = await lock(session, Product, order.product_id)
+            if product is not None and product.uses_inventory:
+                await inventory.sell_units(session, order, product)
+    elif new_status == OrderStatus.processing and order.fulfillment_status in (None, "pending"):
+        order.fulfillment_status = "manual"
     if delivery_data is not None:
         order.delivery_data = delivery_data
     if admin_note is not None:
         order.admin_note = admin_note
     order.status = new_status
     add_event(session, order, new_status, actor, old, note=admin_note or None)
+    if new_status == OrderStatus.completed:
+        from app.services import incidents
+
+        await incidents.resolve_for_order(session, order.id, ["fulfillment_failed", "stuck_order"], actor)
+        await notifications.notify_customer(session, order, "order_delivered")
+    elif new_status == OrderStatus.expired:
+        await notifications.notify_customer(session, order, "order_expired")
+    elif new_status == OrderStatus.cancelled and not actor.startswith("user:"):
+        await notifications.notify_customer(session, order, "order_cancelled", reason=admin_note or "Заказ отменён администратором")
     return order
+
+
+async def refund_to_balance(session: AsyncSession, order: Order, *, actor: str, reason: str) -> None:
+    """Full refund to the store balance (confirmed internally, so it completes immediately). Order row locked."""
+    from app.models import Refund
+
+    already = await session.scalar(
+        select(func.count(Refund.id)).where(Refund.order_id == order.id, Refund.status.in_(["succeeded", "processing"]))
+    )
+    if already:
+        raise ServiceError("По заказу уже выполнен или выполняется возврат", 409, "already_refunded")
+    user = await lock(session, User, order.user_id)
+    assert user is not None
+    await change_balance(
+        session, user, money(order.total), TxType.refund, f"Возврат по заказу #{order.id}", order_id=order.id
+    )
+    user.total_spent = max(money(0), money(user.total_spent) - money(order.total))
+    if order.status != OrderStatus.completed:
+        await _release_items(session, order, "refunded")
+    session.add(Refund(order_id=order.id, amount=money(order.total), method="balance", status="succeeded",
+                       reason=reason[:500], requested_by=actor[:64], approved_by=actor[:64], completed_at=utcnow()))
+    await notifications.notify_customer(session, order, "order_refunded", reason="деньги зачислены на баланс магазина")
 
 
 async def _cancel_open_payments(session: AsyncSession, order_id: int) -> None:

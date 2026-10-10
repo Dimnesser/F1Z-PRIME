@@ -107,11 +107,17 @@ class OrderOut(ORM):
     created_at: datetime
     product_id: int | None
     premium_number_id: int | None
+    public_id: str | None = None
+    fulfillment_status: str | None = None
+    stage: str = ""
 
 
 class OrderDetailOut(OrderOut):
     payments: list[PaymentOut] = []
     delivery_note: str | None = None
+    # decrypted inventory units (keys/vouchers) — only after the order is delivered
+    delivered_items: list[str] = []
+    support_ticket_id: int | None = None
 
 
 class OrderCreate(BaseModel):
@@ -144,6 +150,12 @@ class ManualSubmit(BaseModel):
 class TicketCreate(BaseModel):
     subject: str = Field(min_length=3, max_length=160)
     text: str = Field(min_length=2, max_length=4000)
+    category: str = Field(default="general", pattern=r"^[a-z_]{2,32}$")
+
+
+class OrderSupportCreate(BaseModel):
+    category: str = Field(pattern=r"^[a-z_]{2,32}$")
+    text: str = Field(default="", max_length=4000)
 
 
 class MessageCreate(BaseModel):
@@ -163,6 +175,9 @@ class TicketOut(ORM):
     status: TicketStatus
     created_at: datetime
     updated_at: datetime
+    order_id: int | None = None
+    category: str = "general"
+    priority: str = "normal"
 
 
 class TicketDetailOut(TicketOut):
@@ -233,6 +248,8 @@ class ProductIn(BaseModel):
     is_popular: bool = False
     sort_order: int = Field(default=100, ge=0, le=10000)
     delivery_note: str = Field(default="", max_length=4000)
+    fulfillment_mode: Literal["auto", "manual", "review"] = "manual"
+    uses_inventory: bool = False
 
 
 class ProductPatch(BaseModel):
@@ -246,10 +263,15 @@ class ProductPatch(BaseModel):
     is_popular: bool | None = None
     sort_order: int | None = Field(default=None, ge=0, le=10000)
     delivery_note: str | None = Field(default=None, max_length=4000)
+    fulfillment_mode: Literal["auto", "manual", "review"] | None = None
+    uses_inventory: bool | None = None
+    stock_reason: str | None = Field(default=None, max_length=200)  # required when stock changes
 
 
 class AdminProductOut(ProductOut):
     status: ProductStatus
+    fulfillment_mode: str = "manual"
+    uses_inventory: bool = False
     sort_order: int
     country_id: int | None
     delivery_note: str

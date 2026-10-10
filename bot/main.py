@@ -10,7 +10,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, MenuButtonWebApp, WebAppInfo
 
 from app.config import get_settings
-from app.db import dispose_engine
+from app.db import dispose_engine, session_factory
 from bot.handlers import router
 from bot.keyboards import webapp_url
 
@@ -41,6 +41,26 @@ async def setup_bot(bot: Bot) -> None:
         log.warning("WEBAPP_URL is not https — Mini App buttons are hidden (Telegram requires HTTPS)")
 
 
+async def heartbeat_loop() -> None:
+    """Marks the bot as alive for the admin «Система» page (TaskRun "bot")."""
+    from app.models import TaskRun
+    from app.services.common import utcnow
+
+    while True:
+        try:
+            async with session_factory()() as session:
+                row = await session.get(TaskRun, "bot")
+                if row is None:
+                    session.add(TaskRun(name="bot", runs=1, failures=0, last_started_at=utcnow(), last_success_at=utcnow()))
+                else:
+                    row.runs += 1
+                    row.last_success_at = utcnow()
+                await session.commit()
+        except Exception:  # noqa: BLE001
+            log.warning("bot heartbeat failed", exc_info=True)
+        await asyncio.sleep(60)
+
+
 async def main() -> None:
     s = get_settings()
     logging.basicConfig(level=s.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -55,6 +75,7 @@ async def main() -> None:
         await setup_bot(bot)
         me = await bot.get_me()
         log.info("bot @%s started", me.username)
+        beat = asyncio.create_task(heartbeat_loop())  # noqa: F841 - lives as long as polling
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         await bot.session.close()

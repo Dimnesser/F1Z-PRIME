@@ -47,7 +47,7 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
     # --- automation (private)
     "auto_complete_digital": (
         "false",
-        "Автоматически завершать оплаченные заказы цифровых товаров (выдаётся «инструкция после оплаты»)",
+        "Автоматическая выдача товаров с режимом «auto» (ключи из склада или инструкция) после подтверждённой оплаты",
         False,
     ),
     "low_stock_alerts": ("true", "Уведомлять о низких остатках товаров", False),
@@ -56,16 +56,71 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
     "expire_reservations": ("true", "Снимать резерв с неоплаченных заказов по истечении времени", False),
     "auto_backup": ("true", "Ежедневная резервная копия базы", False),
     "error_monitoring": ("true", "Сообщать администраторам об ошибках сервера и Mini App", False),
+    # --- store profile & catalog (public)
+    "shop_logo_url": ("", "Логотип магазина (https://...)", True),
+    "language": ("ru", "Язык интерфейса Mini App", True),
+    "show_out_of_stock": ("true", "Показывать товары без остатка (с пометкой «нет в наличии»)", True),
+    "catalog_sort": ("manual", "Сортировка каталога: manual, price_asc, price_desc, popular, new", True),
+    "promo_banner_text": ("", "Текст промо-баннера на главной (пусто — скрыт)", True),
+    "promo_banner_url": ("", "Ссылка промо-баннера (https://...)", True),
+    "refund_policy": ("Возврат возможен, если товар не был выдан. Обратитесь в поддержку.", "Правила возвратов", True),
+    # --- orders (private)
+    "min_order_total": ("0", "Минимальная сумма заказа, грн (0 — без ограничения)", False),
+    "max_order_total": ("0", "Максимальная сумма заказа, грн (0 — без ограничения)", False),
+    "max_items_per_user_day": ("0", "Лимит покупок одного товара на пользователя в сутки (0 — без лимита)", False),
+    "big_order_threshold": ("1000", "Крупный заказ от, грн (уведомление владельцу)", False),
+    # --- notifications (private)
+    "notify_customers": ("true", "Отправлять покупателям уведомления о заказах", False),
+    "notify_staff": ("true", "Отправлять уведомления сотрудникам в Telegram", False),
+    "quiet_hours_enabled": ("false", "Тихие часы для некритичных уведомлений сотрудникам", False),
+    "quiet_hours_start": ("23:00", "Начало тихих часов (Киев)", False),
+    "quiet_hours_end": ("08:00", "Конец тихих часов (Киев)", False),
+    "daily_summary": ("true", "Ежедневная сводка продаж владельцу", False),
+    "backup_interval_hours": ("24", "Интервал резервного копирования, часов", False),
 }
+
+GROUP: dict[str, str] = {
+    **{k: "store" for k in ("shop_name", "shop_description", "shop_logo_url", "currency", "language", "support_contact",
+                            "support_url", "channel_url", "rules_url", "refund_policy")},
+    **{k: "showcase" for k in ("banner_title", "banner_subtitle", "banner_image_url", "promo_banner_text",
+                               "promo_banner_url", "show_out_of_stock", "catalog_sort")},
+    **{k: "payments" for k in ("uah_per_star", "stars_enabled", "manual_enabled", "manual_payment_details", "min_topup",
+                               "max_topup")},
+    **{k: "orders" for k in ("min_order_total", "max_order_total", "max_items_per_user_day", "big_order_threshold",
+                             "maintenance_mode", "maintenance_message")},
+    **{k: "notifications" for k in ("notify_orders", "notify_payments", "notify_tickets", "notify_customers",
+                                    "notify_staff", "quiet_hours_enabled", "quiet_hours_start", "quiet_hours_end",
+                                    "daily_summary")},
+    **{k: "automation" for k in ("auto_complete_digital", "low_stock_alerts", "low_stock_threshold",
+                                 "notification_retry", "expire_reservations", "auto_backup", "error_monitoring",
+                                 "backup_interval_hours")},
+}
+# settings read once at process start (shown with a warning in the panel)
+RESTART_REQUIRED: set[str] = set()
+TIME_KEYS = {"quiet_hours_start", "quiet_hours_end"}
+CHOICES = {"catalog_sort": {"manual", "price_asc", "price_desc", "popular", "new"}, "language": {"ru", "uk", "en"}}
 
 BOOL_KEYS = {
     "stars_enabled", "manual_enabled", "maintenance_mode", "notify_orders", "notify_payments", "notify_tickets",
     "auto_complete_digital", "low_stock_alerts", "notification_retry", "expire_reservations", "auto_backup",
-    "error_monitoring",
+    "error_monitoring", "show_out_of_stock", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
 }
 POSITIVE_NUMBER_KEYS = {"uah_per_star", "min_topup", "max_topup"}
-INT_KEYS = {"low_stock_threshold"}
-URL_KEYS = {"support_url", "channel_url", "rules_url", "banner_image_url"}
+NON_NEGATIVE_NUMBER_KEYS = {"min_order_total", "max_order_total", "big_order_threshold"}
+INT_KEYS = {"low_stock_threshold", "max_items_per_user_day", "backup_interval_hours"}
+URL_KEYS = {"support_url", "channel_url", "rules_url", "banner_image_url", "shop_logo_url", "promo_banner_url"}
+
+
+def kind(key: str) -> str:
+    if key in BOOL_KEYS:
+        return "bool"
+    if key in POSITIVE_NUMBER_KEYS | NON_NEGATIVE_NUMBER_KEYS | INT_KEYS:
+        return "number"
+    if key in TIME_KEYS:
+        return "time"
+    if key in CHOICES:
+        return "choice"
+    return "text"
 
 
 def validate(key: str, value: str) -> str:
@@ -84,8 +139,25 @@ def validate(key: str, value: str) -> str:
                 raise InvalidOperation
         except InvalidOperation:
             raise ValueError(f"{key}: нужно положительное число") from None
+    if key in NON_NEGATIVE_NUMBER_KEYS:
+        try:
+            if Decimal(value) < 0:
+                raise InvalidOperation
+        except InvalidOperation:
+            raise ValueError(f"{key}: нужно число от 0") from None
     if key in INT_KEYS and (not value.isdigit() or int(value) > 100_000):
         raise ValueError(f"{key}: нужно целое число от 0")
+    if key == "backup_interval_hours" and not 1 <= int(value) <= 168:
+        raise ValueError("Интервал резервного копирования: от 1 до 168 часов")
+    if key in TIME_KEYS:
+        import re
+
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError(f"{key}: время в формате ЧЧ:ММ")
+    if key in CHOICES and value not in CHOICES[key]:
+        raise ValueError(f"{key}: допустимо {', '.join(sorted(CHOICES[key]))}")
+    if len(value) > 4000:
+        raise ValueError(f"{key}: слишком длинное значение")
     if key in URL_KEYS and value and not value.startswith("https://"):
         raise ValueError(f"{key}: ссылка должна начинаться с https://")
     if key == "shop_name" and not value:

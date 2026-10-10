@@ -74,11 +74,19 @@ async def test_revoked_access_cuts_existing_session(client, admin_headers, monke
     assert (await client.get("/api/me/admin-access", headers=tma(4242, "mgr"))).json()["allowed"] is False
 
 
-async def test_support_role_cannot_enter_from_miniapp(client, admin_headers):
+async def test_support_role_enters_with_own_permissions_only(client, admin_headers):
+    # every team member gets the button automatically, but only with the permissions of their role
     await client.post("/api/admin/accounts", json={"username": "agent", "password": "agent-pass-123",
                                                    "role": "support", "telegram_id": 777}, headers=admin_headers)
-    assert (await client.get("/api/me/admin-access", headers=tma(777, "agent"))).json()["allowed"] is False
-    assert (await client.post("/api/admin/telegram-login", headers=tma(777, "agent"))).status_code == 403
+    assert (await client.get("/api/me/admin-access", headers=tma(777, "agent"))).json()["allowed"] is True
+    token = (await client.post("/api/admin/telegram-login", headers=tma(777, "agent"))).json()["token"]
+    h = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/api/admin/support/tickets", headers=h)).status_code == 200
+    assert (await client.get("/api/admin/finance/summary", headers=h)).status_code == 403
+    assert (await client.get("/api/admin/roles", headers=h)).status_code == 403
+    # a stranger still has no access
+    assert (await client.get("/api/me/admin-access", headers=tma(778, "nobody"))).json()["allowed"] is False
+    assert (await client.post("/api/admin/telegram-login", headers=tma(778, "nobody"))).status_code == 403
 
 
 async def test_telegram_id_unique_across_accounts(client, admin_headers):

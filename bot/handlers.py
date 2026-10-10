@@ -30,6 +30,7 @@ from app.models import (
     User,
 )
 from app.security import TelegramUser
+from app.services import fulfillment
 from app.services import orders as order_service
 from app.services import payments as payment_service
 from app.services import telegram as tg_api
@@ -268,8 +269,11 @@ async def buy(cb: CallbackQuery) -> None:
             ),
         )
         return
+    if order.status.value == "paid":
+        await fulfillment.run_now(order.id)  # instant delivery; the worker job is the durable fallback
+        async with session_factory()() as session:
+            order = await session.get(Order, order.id) or order  # type: ignore[assignment]
     await _edit_or_send(cb, _order_text(order, paid_now=True), rows([_orders_btn()], menu_row()))
-    await tg_api.notify_admins(f"💰 Заказ #{order.id} оплачен с баланса — {order.total} грн (бот)", kind="orders")
 
 
 def _orders_btn() -> InlineKeyboardButton:
@@ -279,7 +283,7 @@ def _orders_btn() -> InlineKeyboardButton:
 def _order_text(order: Order, paid_now: bool = False) -> str:
     head = "✅ <b>Оплата прошла успешно!</b>\n\n" if paid_now else ""
     text = (
-        f"{head}🧾 <b>Заказ #{order.id}</b>\n{esc(order.item_title)} × {order.quantity}\n"
+        f"{head}🧾 <b>Заказ {order.public_id or f'#{order.id}'}</b>\n{esc(order.item_title)} × {order.quantity}\n"
         f"Сумма: <b>{fmt_money(order.total)} грн</b>\n"
         f"Статус: <b>{order_service.STATUS_LABELS[order.status]}</b>\n"
         f"Дата: {order.created_at:%d.%m.%Y %H:%M}"
@@ -504,12 +508,17 @@ async def successful_payment(message: Message) -> None:
             await message.answer("⚠️ Платёж требует проверки администратором. Мы свяжемся с вами.")
         return
     if order is not None:
+        if order.status.value == "paid":
+            await fulfillment.run_now(order.id)
+            async with session_factory()() as session:
+                order = await session.get(Order, order.id) or order
         await message.answer(_order_text(order, paid_now=True), reply_markup=rows([_orders_btn()], menu_row()))
     else:
         await message.answer(
             f"✅ Баланс пополнен на <b>{fmt_money(payment.amount)} грн</b>", reply_markup=rows(menu_row())
         )
-    await tg_api.notify_admins(f"⭐ Stars-платёж #{payment.id}: {payment.amount} грн ({payment.stars_amount} XTR)", kind="payments")
+    if order is None:  # sales are announced by the order pipeline (staff_new_sale); top-ups here
+        await tg_api.notify_admins(f"⭐ Пополнение Stars #{payment.id}: {payment.amount} грн ({payment.stars_amount} XTR)", kind="payments")
 
 
 @router.message()

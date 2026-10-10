@@ -70,6 +70,18 @@ async def change_balance(
     return tx
 
 
+SENSITIVE = ("password", "token", "secret", "key_value", "units", "number_full")
+
+
+def _scrub(value):  # noqa: ANN001, ANN202
+    if isinstance(value, dict):
+        return {k: ("***" if any(x in str(k).lower() for x in SENSITIVE) else _scrub(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub(v) for v in value]
+    return value
+
+
 def log_admin(session: AsyncSession, admin: str, action: str, entity: str, entity_id: int | None, **details) -> None:
-    clean = json.loads(json.dumps(details, default=lambda v: v.value if hasattr(v, "value") else str(v)))
+    """Audit log entry. Passwords, tokens and deliverable secrets are never stored (masked as ***)."""
+    clean = _scrub(json.loads(json.dumps(details, default=lambda v: v.value if hasattr(v, "value") else str(v))))
     session.add(AdminAction(admin=admin, action=action, entity=entity, entity_id=entity_id, details=clean))

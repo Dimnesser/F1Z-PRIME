@@ -34,6 +34,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-f1z}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-f1z}
+      RUN_BACKGROUND_TASKS: "false"
+      APP_VERSION: ${APP_VERSION:-unknown}
     volumes:
       - backups:/srv/backups
     depends_on:
@@ -57,6 +59,23 @@ services:
     depends_on:
       api: { condition: service_healthy }
     mem_limit: 192m
+    logging: *logging
+
+  # durable background work: fulfillment, notifications with retries, reservation expiry, checks, backups
+  worker:
+    image: f1z-prime-backend:latest
+    command: ["worker"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-f1z}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-f1z}
+      RUN_BACKGROUND_TASKS: "false"
+      APP_VERSION: ${APP_VERSION:-unknown}
+    volumes:
+      - backups:/srv/backups
+    depends_on:
+      api: { condition: service_healthy }
+    mem_limit: 160m
     logging: *logging
 
   web:

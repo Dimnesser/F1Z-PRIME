@@ -15,11 +15,13 @@ from decimal import Decimal, InvalidOperation
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import ROLE_LABELS, AdminDep, ManagerDep, SessionDep, StaffDep
+from app.api.deps import ROLE_LABELS, AdminDep, SessionDep
+from app.api.deps import perm as P
 from app.config import get_settings
 from app.models import (
     AdminUser,
@@ -75,8 +77,8 @@ from app.schemas import (
     UserPatch,
 )
 from app.security import InitDataError, check_admin_credentials, create_admin_token, validate_init_data, verify_password
-from app.services import admin_access
-from app.services import masks
+from app.services import admin_access, approvals, rbac
+from app.services import fulfillment, inventory, masks, refunds
 from app.services import orders as order_service
 from app.services import payments as payment_service
 from app.services import telegram
@@ -159,13 +161,14 @@ async def login(body: AdminLogin, request: Request, session: SessionDep) -> dict
     if len(attempts) >= LOGIN_MAX:
         raise HTTPException(429, "Слишком много попыток входа. Попробуйте через 5 минут.")
     s = get_settings()
-    role, source = None, "env"
+    role, source, tv = None, "env", None
     if check_admin_credentials(body.username, body.password, s):
         role = "owner"
     else:
         account = await session.scalar(select(AdminUser).where(AdminUser.username == body.username))
-        if account and account.is_active and verify_password(body.password, account.password_hash):
-            role, source = account.role.value, "db"
+        if (account and account.password_hash and verify_password(body.password, account.password_hash)
+                and await rbac.account_has(session, account, None)):
+            role, source, tv = account.role_slug, "db", account.token_version
             account.last_login_at = utcnow()
     if role is None:
         attempts.append(now)
@@ -174,7 +177,7 @@ async def login(body: AdminLogin, request: Request, session: SessionDep) -> dict
     log_admin(session, body.username, "login", "admin", None, ip=ip)
     await session.commit()
     return {
-        "token": create_admin_token(body.username, s.secret_key, s.admin_token_ttl_hours, role, source),
+        "token": create_admin_token(body.username, s.secret_key, s.admin_token_ttl_hours, role, source, token_version=tv),
         "username": body.username,
         "role": role,
         "expires_in": s.admin_token_ttl_hours * 3600,
@@ -205,17 +208,22 @@ async def telegram_login(
     except InitDataError as exc:
         attempts.append(now)
         raise HTTPException(401, "Откройте админ-панель из Telegram") from exc
-    role = await admin_access.telegram_role(session, tg.id)
-    if role not in admin_access.MINIAPP_ROLES:
+    role, account = await admin_access.telegram_access(session, tg.id)
+    if role is None:
         attempts.append(now)
         raise HTTPException(403, "У этого Telegram-аккаунта нет доступа к админ-панели")
     attempts.clear()
     label = admin_access.telegram_label(tg.id, tg.username)
+    if account is not None:
+        account.last_login_at = utcnow()
+        if tg.username and account.telegram_username != tg.username:
+            account.telegram_username = tg.username
     log_admin(session, label, "login_telegram", "admin", None, ip=ip, telegram_id=tg.id)
     await session.commit()
     ttl = admin_access.TELEGRAM_TOKEN_TTL_HOURS
     return {
-        "token": create_admin_token(label, s.secret_key, ttl, role, "tg", telegram_id=tg.id),
+        "token": create_admin_token(label, s.secret_key, ttl, role, "tg", telegram_id=tg.id,
+                                    token_version=account.token_version if account else None),
         "username": label,
         "role": role,
         "expires_in": int(ttl * 3600),
@@ -223,12 +231,20 @@ async def telegram_login(
 
 
 @router.get("/me")
-async def admin_me(admin: AdminDep) -> dict:
+async def admin_me(admin: AdminDep, session: SessionDep) -> dict:
     s = get_settings()
+    label = ROLE_LABELS.get(admin.role)
+    if label is None:
+        role = await rbac.get_role(session, admin.role)
+        label = role.name if role else admin.role
     return {
         "username": str(admin),
         "role": admin.role,
-        "role_label": ROLE_LABELS.get(admin.role, admin.role),
+        "role_label": label,
+        "is_owner": admin.is_owner,
+        "permissions": sorted(admin.perms),
+        "limits": admin.limits,
+        "key": admin.key,
         "dev_mode": s.dev_mode,
         "environment": s.environment,
     }
@@ -267,7 +283,7 @@ def _users_query(search: str | None, blocked: bool | None, has_orders: bool | No
 
 @router.get("/users")
 async def list_users(
-    admin: StaffDep,
+    admin: P("users.view"),
     session: SessionDep,
     search: str | None = Query(None, max_length=64),
     blocked: bool | None = None,
@@ -285,7 +301,7 @@ async def list_users(
 
 @router.get("/users/export.csv")
 async def export_users(
-    admin: ManagerDep,
+    admin: P("users.export"),
     session: SessionDep,
     search: str | None = Query(None, max_length=64),
     blocked: bool | None = None,
@@ -306,7 +322,7 @@ async def export_users(
 
 
 @router.get("/users/{user_id}")
-async def user_detail(user_id: int, admin: StaffDep, session: SessionDep) -> dict:
+async def user_detail(user_id: int, admin: P("users.view"), session: SessionDep) -> dict:
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(404, "Пользователь не найден")
@@ -325,6 +341,8 @@ async def user_detail(user_id: int, admin: StaffDep, session: SessionDep) -> dic
         await session.scalars(select(Payment).where(Payment.user_id == user_id).order_by(Payment.id.desc()).limit(100))
     ).unique().all()
     tickets = await session.scalar(select(func.count(SupportTicket.id)).where(SupportTicket.user_id == user_id))
+    if not admin.can("users.history"):
+        orders, txs, payments = [], [], []
     return {
         "user": AdminUserOut.model_validate(user, from_attributes=True),
         "orders": [AdminOrderOut.model_validate(o, from_attributes=True) for o in orders],
@@ -335,7 +353,7 @@ async def user_detail(user_id: int, admin: StaffDep, session: SessionDep) -> dic
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
-async def patch_user(user_id: int, body: UserPatch, admin: ManagerDep, session: SessionDep) -> User:
+async def patch_user(user_id: int, body: UserPatch, admin: P("users.block"), session: SessionDep) -> User:
     user = await lock(session, User, user_id)
     if user is None:
         raise HTTPException(404, "Пользователь не найден")
@@ -347,7 +365,7 @@ async def patch_user(user_id: int, body: UserPatch, admin: ManagerDep, session: 
 
 
 @router.post("/users/{user_id}/balance", response_model=AdminUserOut)
-async def adjust_balance(user_id: int, body: BalanceAdjust, admin: ManagerDep, session: SessionDep) -> User:
+async def adjust_balance(user_id: int, body: BalanceAdjust, admin: P("users.balance"), session: SessionDep) -> User:
     user = await lock(session, User, user_id)
     if user is None:
         raise HTTPException(404, "Пользователь не найден")
@@ -365,12 +383,12 @@ async def adjust_balance(user_id: int, body: BalanceAdjust, admin: ManagerDep, s
 
 
 @router.get("/countries", response_model=list[CountryOut])
-async def list_countries(admin: StaffDep, session: SessionDep) -> list:
+async def list_countries(admin: P("products.view"), session: SessionDep) -> list:
     return list((await session.scalars(select(Country).order_by(Country.sort_order, Country.id))).all())
 
 
 @router.post("/countries", response_model=CountryOut, status_code=201)
-async def create_country(body: CountryIn, admin: ManagerDep, session: SessionDep) -> Country:
+async def create_country(body: CountryIn, admin: P("products.edit"), session: SessionDep) -> Country:
     if await session.scalar(select(Country).where(Country.code == body.code)):
         raise HTTPException(409, "Страна с таким кодом уже есть")
     country = Country(**body.model_dump())
@@ -382,7 +400,7 @@ async def create_country(body: CountryIn, admin: ManagerDep, session: SessionDep
 
 
 @router.patch("/countries/{country_id}", response_model=CountryOut)
-async def update_country(country_id: int, body: CountryPatch, admin: ManagerDep, session: SessionDep) -> Country:
+async def update_country(country_id: int, body: CountryPatch, admin: P("products.edit"), session: SessionDep) -> Country:
     country = await session.get(Country, country_id)
     if country is None:
         raise HTTPException(404, "Страна не найдена")
@@ -401,7 +419,7 @@ async def update_country(country_id: int, body: CountryPatch, admin: ManagerDep,
 
 
 @router.delete("/countries/{country_id}")
-async def delete_country(country_id: int, admin: ManagerDep, session: SessionDep) -> dict:
+async def delete_country(country_id: int, admin: P("products.edit"), session: SessionDep) -> dict:
     country = await session.get(Country, country_id)
     if country is None:
         raise HTTPException(404, "Страна не найдена")
@@ -418,12 +436,12 @@ async def delete_country(country_id: int, admin: ManagerDep, session: SessionDep
 
 
 @router.get("/categories", response_model=list[CategoryOut])
-async def list_categories(admin: StaffDep, session: SessionDep) -> list:
+async def list_categories(admin: P("products.view"), session: SessionDep) -> list:
     return list((await session.scalars(select(Category).order_by(Category.sort_order, Category.id))).all())
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=201)
-async def create_category(body: CategoryIn, admin: ManagerDep, session: SessionDep) -> Category:
+async def create_category(body: CategoryIn, admin: P("products.edit"), session: SessionDep) -> Category:
     if await session.scalar(select(Category).where(Category.slug == body.slug)):
         raise HTTPException(409, "Категория с таким кодом уже есть")
     item = Category(**body.model_dump())
@@ -435,7 +453,7 @@ async def create_category(body: CategoryIn, admin: ManagerDep, session: SessionD
 
 
 @router.patch("/categories/{category_id}", response_model=CategoryOut)
-async def update_category(category_id: int, body: CategoryPatch, admin: ManagerDep, session: SessionDep) -> Category:
+async def update_category(category_id: int, body: CategoryPatch, admin: P("products.edit"), session: SessionDep) -> Category:
     item = await session.get(Category, category_id)
     if item is None:
         raise HTTPException(404, "Категория не найдена")
@@ -448,7 +466,7 @@ async def update_category(category_id: int, body: CategoryPatch, admin: ManagerD
 
 
 @router.delete("/categories/{category_id}")
-async def delete_category(category_id: int, admin: ManagerDep, session: SessionDep) -> dict:
+async def delete_category(category_id: int, admin: P("products.edit"), session: SessionDep) -> dict:
     item = await session.get(Category, category_id)
     if item is None:
         raise HTTPException(404, "Категория не найдена")
@@ -471,7 +489,7 @@ async def _check_category(session: SessionDep, slug: str | None) -> None:
 
 @router.get("/products", response_model=list[AdminProductOut])
 async def list_products(
-    admin: StaffDep,
+    admin: P("products.view"),
     session: SessionDep,
     search: str | None = Query(None, max_length=64),
     status: ProductStatus | None = None,
@@ -500,39 +518,81 @@ async def _check_country(session: SessionDep, country_id: int | None) -> None:
 
 
 @router.post("/products", response_model=AdminProductOut, status_code=201)
-async def create_product(body: ProductIn, admin: ManagerDep, session: SessionDep) -> Product:
+async def create_product(body: ProductIn, admin: P("products.edit"), session: SessionDep) -> Product:
     await _check_country(session, body.country_id)
     await _check_category(session, body.category)
-    product = Product(**body.model_dump())
+    if body.price is not None and not admin.can("products.price"):
+        raise HTTPException(403, "Недостаточно прав: Изменять цены")
+    data = body.model_dump()
+    if data["uses_inventory"]:
+        data["stock"] = 0  # inventory-backed: stock comes from uploaded units
+    product = Product(**data)
     session.add(product)
     await session.flush()
+    if product.stock:
+        inventory.record(session, product, product.stock, "initial", actor=str(admin), note="начальный остаток")
     log_admin(session, admin, "create", "product", product.id, **body.model_dump())
     await session.commit()
     return await session.get(Product, product.id, populate_existing=True)  # type: ignore[return-value]
 
 
 @router.patch("/products/{product_id}", response_model=AdminProductOut)
-async def update_product(product_id: int, body: ProductPatch, admin: ManagerDep, session: SessionDep) -> Product:
+async def update_product(product_id: int, body: ProductPatch, admin: P("products.edit"), session: SessionDep) -> Product:
     product = await lock(session, Product, product_id)
     if product is None:
         raise HTTPException(404, "Товар не найден")
     changes = body.model_dump(exclude_unset=True)
+    stock_reason = (changes.pop("stock_reason", None) or "").strip()
+    new_stock = changes.pop("stock", None)
     if "country_id" in changes:
         await _check_country(session, changes["country_id"])
     if changes.get("category"):
         await _check_category(session, changes["category"])
+    if changes.get("price") is not None and Decimal(changes["price"]) != Decimal(product.price):
+        _check_price_change(admin, Decimal(product.price), Decimal(changes["price"]))
+    if changes.get("fulfillment_mode") is not None and changes["fulfillment_mode"] not in ("auto", "manual", "review"):
+        raise HTTPException(422, "Режим выдачи: auto, manual или review")
+    if changes.get("uses_inventory") is not None and changes["uses_inventory"] != product.uses_inventory:
+        if not admin.can("products.stock"):
+            raise HTTPException(403, "Недостаточно прав: Управлять остатками и единицами")
+        product.uses_inventory = changes.pop("uses_inventory")
+        if product.uses_inventory:
+            # stock now equals the number of free units
+            avail = await inventory.available_count(session, product.id)
+            delta = avail - product.stock
+            product.stock = avail
+            inventory.record(session, product, delta, "mode", actor=str(admin), note="остаток = свободные единицы")
+    else:
+        changes.pop("uses_inventory", None)
     before = {k: getattr(product, k) for k in changes}
     for k, v in changes.items():
         if v is None and k != "country_id":
             continue
         setattr(product, k, v)
+    if new_stock is not None and new_stock != product.stock:
+        if not admin.can("products.stock"):
+            raise HTTPException(403, "Недостаточно прав: Управлять остатками и единицами")
+        before["stock"] = product.stock
+        await inventory.adjust_stock(session, product, new_stock, reason=stock_reason, actor=str(admin))
+        changes["stock"] = new_stock
+        changes["stock_reason"] = stock_reason
     log_admin(session, admin, "update", "product", product.id, before=before, after=changes)
     await session.commit()
     return await session.get(Product, product.id, populate_existing=True)  # type: ignore[return-value]
 
 
+def _check_price_change(admin, old: Decimal, new: Decimal) -> None:  # noqa: ANN001
+    if not admin.can("products.price"):
+        raise HTTPException(403, "Недостаточно прав: Изменять цены")
+    limit = admin.limits.get("price_change_pct_max")
+    if limit is not None and old > 0:
+        pct = abs(new - old) / old * 100
+        if pct > Decimal(str(limit)):
+            raise HTTPException(403, f"Изменение цены на {pct:.0f}% превышает лимит роли ({limit}%)")
+
+
 @router.delete("/products/{product_id}")
-async def delete_product(product_id: int, admin: ManagerDep, session: SessionDep) -> dict:
+async def delete_product(product_id: int, admin: P("products.delete"), session: SessionDep) -> dict:
     product = await lock(session, Product, product_id)
     if product is None:
         raise HTTPException(404, "Товар не найден")
@@ -549,8 +609,15 @@ async def delete_product(product_id: int, admin: ManagerDep, session: SessionDep
 
 
 @router.post("/products/bulk")
-async def bulk_products(body: ProductBulk, admin: ManagerDep, session: SessionDep) -> dict:
+async def bulk_products(body: ProductBulk, admin: AdminDep, session: SessionDep) -> dict:
     """Mass update. Validates every product first; nothing is saved if any row would become invalid."""
+    need = {"status": "products.edit", "category": "products.edit", "stock_set": "products.stock",
+            "stock_delta": "products.stock"}.get(body.action, "products.price")
+    if not admin.can(need):
+        raise HTTPException(403, f"Недостаточно прав: {rbac.PERMISSIONS[need][1]}")
+    bulk_max = admin.limits.get("bulk_max")
+    if bulk_max is not None and len(body.ids) > int(bulk_max):
+        raise HTTPException(403, f"Массовая операция на {len(body.ids)} товаров превышает лимит роли ({int(bulk_max)})")
     products = (
         await session.scalars(
             select(Product).where(Product.id.in_(body.ids)).order_by(Product.id).with_for_update(of=Product)
@@ -590,12 +657,19 @@ async def bulk_products(body: ProductBulk, admin: ManagerDep, session: SessionDe
                 price = Decimal(p.price) + amount
             changes.append((p, "price", money(price)))
     for p, field, new in changes:
+        if field == "price":
+            _check_price_change(admin, Decimal(p.price), Decimal(new))  # type: ignore[arg-type]
         if field == "price" and not (Decimal("0.01") <= new <= Decimal(1_000_000)):  # type: ignore[operator]
             raise HTTPException(422, f"Цена «{p.title}» станет {new} — допустимо от 0.01 до 1 000 000")
         if field == "stock" and not (0 <= new <= 1_000_000):  # type: ignore[operator]
             raise HTTPException(422, f"Остаток «{p.title}» станет {new} — допустимо от 0 до 1 000 000")
     for p, field, new in changes:
-        setattr(p, field, new)
+        if field == "stock":
+            if p.uses_inventory:
+                raise HTTPException(409, f"Остаток «{p.title}» считается по единицам товара")
+            await inventory.adjust_stock(session, p, int(new), reason=f"массовое изменение ({body.action})", actor=str(admin))  # type: ignore[arg-type]
+        else:
+            setattr(p, field, new)
     log_admin(session, admin, "bulk_" + body.action, "product", None, ids=[p.id for p in products], value=value)
     await session.commit()
     return {"updated": len(products)}
@@ -606,7 +680,7 @@ PRODUCT_CSV_FIELDS = ["id", "title", "description", "category", "country_code", 
 
 
 @router.get("/products/export.csv")
-async def export_products(admin: ManagerDep, session: SessionDep) -> Response:
+async def export_products(admin: P("products.import"), session: SessionDep) -> Response:
     products = (await session.scalars(select(Product).order_by(Product.sort_order, Product.id))).unique().all()
     return csv_response(
         "f1z-products.csv",
@@ -621,7 +695,7 @@ def _parse_bool(value: str) -> bool:
 
 
 @router.post("/products/import")
-async def import_products(body: ProductImport, admin: ManagerDep, session: SessionDep) -> dict:
+async def import_products(body: ProductImport, admin: P("products.import"), session: SessionDep) -> dict:
     """CSV import (same columns as export, ";" or "," separated). Rows with an existing id are updated,
     rows without id are created. All-or-nothing: any error rolls back the whole file."""
     text = body.csv.lstrip("﻿")
@@ -667,11 +741,20 @@ async def import_products(body: ProductImport, admin: ManagerDep, session: Sessi
                 if product is None:
                     raise ValueError(f"товар id={product_id} не найден")
                 patch = ProductPatch.model_validate(data).model_dump(exclude_unset=True)
+                new_stock = patch.pop("stock", None)
+                if patch.get("price") is not None and Decimal(patch["price"]) != Decimal(product.price):
+                    _check_price_change(admin, Decimal(product.price), Decimal(patch["price"]))
                 for k, v in patch.items():
                     setattr(product, k, v)
+                if new_stock is not None and new_stock != product.stock:
+                    await inventory.adjust_stock(session, product, new_stock, reason="импорт CSV", actor=str(admin))
                 updated += 1
             else:
-                session.add(Product(**ProductIn.model_validate(data).model_dump()))
+                product = Product(**ProductIn.model_validate(data).model_dump())
+                session.add(product)
+                await session.flush()
+                if product.stock:
+                    inventory.record(session, product, product.stock, "import", actor=str(admin), note="импорт CSV")
                 created += 1
         except Exception as exc:  # noqa: BLE001
             msg = str(exc).split("\n")[0] if not hasattr(exc, "errors") else "; ".join(
@@ -690,7 +773,7 @@ async def import_products(body: ProductImport, admin: ManagerDep, session: Sessi
 
 
 @router.get("/premium-numbers", response_model=list[AdminPremiumOut])
-async def list_premium(admin: StaffDep, session: SessionDep, status: PremiumStatus | None = None) -> list:
+async def list_premium(admin: P("products.view"), session: SessionDep, status: PremiumStatus | None = None) -> list:
     stmt = select(PremiumNumber)
     if status:
         stmt = stmt.where(PremiumNumber.status == status)
@@ -698,7 +781,7 @@ async def list_premium(admin: StaffDep, session: SessionDep, status: PremiumStat
 
 
 @router.post("/premium-numbers/mask-preview")
-async def mask_preview(body: MaskPreviewIn, admin: StaffDep) -> dict:
+async def mask_preview(body: MaskPreviewIn, admin: P("products.edit")) -> dict:
     return {"mask": masks.auto_mask(body.number, body.dial_code, body.visible)}
 
 
@@ -716,7 +799,7 @@ async def _resolve_mask(session: SessionDep, number: str, mask: str | None, coun
 
 
 @router.post("/premium-numbers", response_model=AdminPremiumOut, status_code=201)
-async def create_premium(body: PremiumIn, admin: ManagerDep, session: SessionDep) -> PremiumNumber:
+async def create_premium(body: PremiumIn, admin: P("products.edit"), session: SessionDep) -> PremiumNumber:
     await _check_country(session, body.country_id)
     number = "+" + masks.digits_only(body.number)
     if await session.scalar(select(PremiumNumber).where(PremiumNumber.number == number)):
@@ -733,7 +816,7 @@ async def create_premium(body: PremiumIn, admin: ManagerDep, session: SessionDep
 
 
 @router.patch("/premium-numbers/{number_id}", response_model=AdminPremiumOut)
-async def update_premium(number_id: int, body: PremiumPatch, admin: ManagerDep, session: SessionDep) -> PremiumNumber:
+async def update_premium(number_id: int, body: PremiumPatch, admin: P("products.edit"), session: SessionDep) -> PremiumNumber:
     item = await lock(session, PremiumNumber, number_id)
     if item is None:
         raise HTTPException(404, "Номер не найден")
@@ -760,7 +843,7 @@ async def update_premium(number_id: int, body: PremiumPatch, admin: ManagerDep, 
 
 
 @router.delete("/premium-numbers/{number_id}")
-async def delete_premium(number_id: int, admin: ManagerDep, session: SessionDep) -> dict:
+async def delete_premium(number_id: int, admin: P("products.delete"), session: SessionDep) -> dict:
     item = await lock(session, PremiumNumber, number_id)
     if item is None:
         raise HTTPException(404, "Номер не найден")
@@ -818,7 +901,7 @@ def _transitions() -> dict:
 
 @router.get("/orders")
 async def list_orders(
-    admin: StaffDep,
+    admin: P("orders.view"),
     session: SessionDep,
     status: str | None = Query(None, max_length=32),
     search: str | None = Query(None, max_length=64),
@@ -852,7 +935,7 @@ async def list_orders(
 
 @router.get("/orders/export.csv")
 async def export_orders(
-    admin: ManagerDep,
+    admin: P("orders.export"),
     session: SessionDep,
     status: str | None = Query(None, max_length=32),
     search: str | None = Query(None, max_length=64),
@@ -874,7 +957,7 @@ async def export_orders(
 
 
 @router.get("/orders/{order_id}")
-async def order_detail(order_id: int, admin: StaffDep, session: SessionDep) -> dict:
+async def order_detail(order_id: int, admin: P("orders.view"), session: SessionDep) -> dict:
     order = await session.get(Order, order_id)
     if order is None:
         raise HTTPException(404, "Заказ не найден")
@@ -894,21 +977,111 @@ async def order_detail(order_id: int, admin: StaffDep, session: SessionDep) -> d
     }
 
 
+STATUS_PERMISSION = {
+    OrderStatus.cancelled: "orders.cancel", OrderStatus.expired: "orders.cancel",
+    OrderStatus.completed: "orders.fulfill", OrderStatus.processing: "orders.status",
+    OrderStatus.refunded: "refunds.create", OrderStatus.paid: "orders.status", OrderStatus.pending: "orders.status",
+}
+
+
 @router.post("/orders/{order_id}/status", response_model=AdminOrderOut)
-async def change_order_status(order_id: int, body: OrderStatusChange, admin: ManagerDep, session: SessionDep) -> Order:
+async def change_order_status(order_id: int, body: OrderStatusChange, admin: AdminDep, session: SessionDep) -> Order:
+    need = STATUS_PERMISSION[body.status]
+    if not admin.can(need):
+        raise HTTPException(403, f"Недостаточно прав: {rbac.PERMISSIONS[need][1]}")
+    if body.status == OrderStatus.refunded:
+        order = await session.get(Order, order_id)
+        if order is None:
+            raise HTTPException(404, "Заказ не найден")
+        if not rbac.within_limit(admin.limits, "refund_max", order.total):
+            raise HTTPException(403, "Сумма возврата превышает лимит роли — создайте запрос на одобрение")
     order = await order_service.change_status(
         session, order_id, body.status, delivery_data=body.delivery_data, admin_note=body.admin_note,
         actor=f"admin:{admin}",
     )
     log_admin(session, admin, "status", "order", order_id, status=body.status.value)
     await session.commit()
-    order = await session.get(Order, order_id, populate_existing=True)  # type: ignore[assignment]
-    label = order_service.STATUS_LABELS[order.status]
-    text = f"📦 Заказ #{order.id}: {label}"
-    if order.status == OrderStatus.completed and order.delivery_data:
-        text += f"\n\n{order.delivery_data}"
-    await telegram.notify(order.user.telegram_id, text)
-    return order
+    return await session.get(Order, order_id, populate_existing=True)  # type: ignore[return-value]
+
+
+@router.post("/orders/{order_id}/fulfillment/retry")
+async def retry_fulfillment(order_id: int, admin: P("orders.fulfill"), session: SessionDep) -> dict:
+    await fulfillment.retry(session, order_id, f"admin:{admin}")
+    log_admin(session, admin, "fulfillment_retry", "order", order_id)
+    await session.commit()
+    await fulfillment.run_now(order_id)
+    order = await session.get(Order, order_id, populate_existing=True)
+    return {"fulfillment_status": order.fulfillment_status if order else None}
+
+
+class HandOver(BaseModel):
+    note: str = Field(default="", max_length=300)
+
+
+@router.post("/orders/{order_id}/fulfillment/manual")
+async def hand_to_operator(order_id: int, body: HandOver, admin: P("orders.fulfill"), session: SessionDep) -> dict:
+    await fulfillment.hand_to_operator(session, order_id, f"admin:{admin}", body.note)
+    log_admin(session, admin, "fulfillment_manual", "order", order_id, note=body.note)
+    await session.commit()
+    return {"fulfillment_status": "manual"}
+
+
+class ResendIn(BaseModel):
+    event: str = Field(pattern=r"^[a-z_]{3,32}$")
+
+
+@router.post("/orders/{order_id}/notify")
+async def resend_notification(order_id: int, body: ResendIn, admin: P("orders.status"), session: SessionDep) -> dict:
+    from app.services import notifications
+
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+    if body.event not in notifications.TEMPLATES or notifications.TEMPLATES[body.event][0] != "customer":
+        raise HTTPException(422, "Неизвестный тип уведомления")
+    queued = await notifications.notify_customer(session, order, body.event, dedupe=f"{body.event}:resend:{int(time.time())}")
+    log_admin(session, admin, "notify_resend", "order", order_id, event=body.event)
+    await session.commit()
+    if not queued:
+        raise HTTPException(409, "Этот тип уведомлений выключен в настройках")
+    return {"queued": True}
+
+
+class RefundIn(BaseModel):
+    method: str = Field(pattern=r"^(balance|stars|manual)$")
+    reason: str = Field(min_length=3, max_length=500)
+
+
+@router.post("/orders/{order_id}/refund")
+async def start_refund(order_id: int, body: RefundIn, admin: P("refunds.create"), session: SessionDep) -> dict:
+    """Refund through the payment's own channel. Above the role limit -> approval request (two-person rule)."""
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+    if not rbac.within_limit(admin.limits, "refund_max", order.total):
+        req = await approvals.create(
+            session, "refund", {"order_id": order_id, "method": body.method, "reason": body.reason}, order.total,
+            f"Возврат {order.public_id} ({body.method}) на {order.total} грн: {body.reason}", str(admin),
+        )
+        log_admin(session, admin, "refund_requested", "order", order_id, method=body.method, approval=req.id)
+        await session.commit()
+        return {"status": "approval_required", "approval_id": req.id}
+    refund = await refunds.start(session, order_id, body.method, body.reason, f"admin:{admin}")
+    log_admin(session, admin, "refund", "order", order_id, method=body.method, reason=body.reason)
+    await session.commit()
+    return {"status": refund.status if refund else "succeeded", "refund_id": refund.id if refund else None}
+
+
+class ManualRefundConfirm(BaseModel):
+    note: str = Field(default="", max_length=255)
+
+
+@router.post("/refunds/{refund_id}/confirm-manual")
+async def confirm_manual_refund(refund_id: int, body: ManualRefundConfirm, admin: P("refunds.create"), session: SessionDep) -> dict:
+    refund = await refunds.confirm_manual(session, refund_id, f"admin:{admin}", body.note)
+    log_admin(session, admin, "refund_manual_done", "order", refund.order_id, refund_id=refund_id, note=body.note)
+    await session.commit()
+    return {"status": refund.status}
 
 
 # ----------------------------------------------------------------- payments
@@ -937,7 +1110,7 @@ def _payments_query(
 
 @router.get("/payments")
 async def list_payments(
-    admin: ManagerDep,
+    admin: P("payments.view"),
     session: SessionDep,
     status: PaymentStatus | None = None,
     method: str | None = Query(None, max_length=16),
@@ -956,7 +1129,7 @@ async def list_payments(
 
 @router.get("/payments/export.csv")
 async def export_payments(
-    admin: ManagerDep,
+    admin: P("finance.export"),
     session: SessionDep,
     status: PaymentStatus | None = None,
     method: str | None = Query(None, max_length=16),
@@ -977,7 +1150,7 @@ async def export_payments(
 
 
 @router.post("/payments/{payment_id}/confirm", response_model=AdminPaymentOut)
-async def confirm_payment(payment_id: int, body: PaymentDecision, admin: ManagerDep, session: SessionDep) -> Payment:
+async def confirm_payment(payment_id: int, body: PaymentDecision, admin: P("payments.confirm"), session: SessionDep) -> Payment:
     """Manual verification is allowed only for bank transfers the buyer submitted for review.
     Stars payments are confirmed exclusively by Telegram (successful_payment)."""
     payment = await session.get(Payment, payment_id)
@@ -989,6 +1162,18 @@ async def confirm_payment(payment_id: int, body: PaymentDecision, admin: Manager
         raise HTTPException(
             409, "Вручную подтверждается только перевод, который покупатель отправил на проверку"
         )
+    if not rbac.within_limit(admin.limits, "payment_confirm_max", payment.amount):
+        req = await approvals.create(
+            session, "payment_confirm", {"payment_id": payment_id}, payment.amount,
+            f"Подтверждение перевода #{payment_id} на {payment.amount} грн", str(admin),
+        )
+        log_admin(session, admin, "payment_confirm_requested", "payment", payment_id, approval=req.id)
+        await session.commit()
+        return JSONResponse(  # type: ignore[return-value]
+            {"status": "approval_required", "approval_id": req.id,
+             "detail": f"Сумма выше вашего лимита — запрос #{req.id} отправлен на одобрение"},
+            status_code=202,
+        )
     payment, new = await payment_service.confirm_payment(session, payment_id, actor=f"admin:{admin}")
     if not new:
         raise HTTPException(409, "Платёж уже подтверждён ранее")
@@ -996,21 +1181,26 @@ async def confirm_payment(payment_id: int, body: PaymentDecision, admin: Manager
         payment.admin_comment = body.comment
     log_admin(session, admin, "confirm", "payment", payment_id, amount=payment.amount)
     await session.commit()
-    payment = await session.get(Payment, payment_id, populate_existing=True)  # type: ignore[assignment]
-    await telegram.notify(payment.user.telegram_id, f"✅ Платёж #{payment.id} на {payment.amount} грн подтверждён")
-    return payment
+    if payment.order_id:
+        await fulfillment.run_now(payment.order_id)
+    return await session.get(Payment, payment_id, populate_existing=True)  # type: ignore[return-value]
 
 
 @router.post("/payments/{payment_id}/reject", response_model=AdminPaymentOut)
-async def reject_payment(payment_id: int, body: PaymentDecision, admin: ManagerDep, session: SessionDep) -> Payment:
+async def reject_payment(payment_id: int, body: PaymentDecision, admin: P("payments.confirm"), session: SessionDep) -> Payment:
     payment = await payment_service.reject_payment(session, payment_id, actor=f"admin:{admin}", comment=body.comment)
     log_admin(session, admin, "reject", "payment", payment_id, comment=body.comment)
+    reason = body.comment or "Свяжитесь с поддержкой."
+    if payment.order_id:
+        from app.services import notifications
+
+        order = await session.get(Order, payment.order_id)
+        if order is not None:
+            await notifications.notify_customer(session, order, "payment_rejected", dedupe=f"rejected:{payment_id}", reason=reason)
     await session.commit()
-    payment = await session.get(Payment, payment_id, populate_existing=True)  # type: ignore[assignment]
-    await telegram.notify(
-        payment.user.telegram_id, f"❌ Платёж #{payment.id} отклонён. {body.comment or 'Свяжитесь с поддержкой.'}"
-    )
-    return payment
+    if not payment.order_id:
+        await telegram.notify(payment.user.telegram_id, f"❌ Платёж #{payment.id} отклонён. {reason}")
+    return await session.get(Payment, payment_id, populate_existing=True)  # type: ignore[return-value]
 
 
 # ------------------------------------------------------------------ support
@@ -1018,7 +1208,7 @@ async def reject_payment(payment_id: int, body: PaymentDecision, admin: ManagerD
 
 @router.get("/support/tickets")
 async def list_tickets(
-    admin: StaffDep,
+    admin: P("support.view"),
     session: SessionDep,
     status: TicketStatus | None = None,
     assigned: str | None = Query(None, pattern="^(me|none|any)$"),
@@ -1079,12 +1269,12 @@ async def _ticket(session: SessionDep, ticket_id: int) -> SupportTicket:
 
 
 @router.get("/support/tickets/{ticket_id}", response_model=AdminTicketDetailOut)
-async def ticket_detail(ticket_id: int, admin: StaffDep, session: SessionDep) -> SupportTicket:
+async def ticket_detail(ticket_id: int, admin: P("support.view"), session: SessionDep) -> SupportTicket:
     return await _ticket(session, ticket_id)
 
 
 @router.post("/support/tickets/{ticket_id}/reply", response_model=AdminTicketDetailOut)
-async def ticket_reply(ticket_id: int, body: MessageCreate, admin: StaffDep, session: SessionDep) -> SupportTicket:
+async def ticket_reply(ticket_id: int, body: MessageCreate, admin: P("support.reply"), session: SessionDep) -> SupportTicket:
     ticket = await _ticket(session, ticket_id)
     text = body.text.strip()
     if not text:
@@ -1103,7 +1293,7 @@ async def ticket_reply(ticket_id: int, body: MessageCreate, admin: StaffDep, ses
 
 
 @router.post("/support/tickets/{ticket_id}/status", response_model=AdminTicketDetailOut)
-async def ticket_status(ticket_id: int, body: TicketStatusIn, admin: StaffDep, session: SessionDep) -> SupportTicket:
+async def ticket_status(ticket_id: int, body: TicketStatusIn, admin: P("support.close"), session: SessionDep) -> SupportTicket:
     ticket = await _ticket(session, ticket_id)
     ticket.status = body.status
     ticket.updated_at = utcnow()
@@ -1115,24 +1305,35 @@ async def ticket_status(ticket_id: int, body: TicketStatusIn, admin: StaffDep, s
 
 
 @router.post("/support/tickets/{ticket_id}/assign", response_model=AdminTicketDetailOut)
-async def ticket_assign(ticket_id: int, body: TicketAssign, admin: StaffDep, session: SessionDep) -> SupportTicket:
+async def ticket_assign(ticket_id: int, body: TicketAssign, admin: P("support.view"), session: SessionDep) -> SupportTicket:
     ticket = await _ticket(session, ticket_id)
     target = (body.assigned_to or "").strip() or None
     if target and target not in (get_settings().admin_username, str(admin)):
         account = await session.scalar(select(AdminUser).where(AdminUser.username == target, AdminUser.is_active.is_(True)))
         if account is None:
             raise HTTPException(422, "Оператор не найден")
-    if admin.role == "support" and target not in (None, str(admin)):
-        raise HTTPException(403, "Оператор поддержки может назначить обращение только на себя")
+    if not admin.can("support.assign") and target not in (None, str(admin)):
+        raise HTTPException(403, "Без права «Переназначать оператору» можно взять обращение только себе")
     ticket.assigned_to = target
     log_admin(session, admin, "assign", "ticket", ticket.id, assigned_to=target)
+    if target and target != str(admin):
+        from app.services import inbox
+
+        acc = await session.scalar(select(AdminUser).where(AdminUser.username == target))
+        recipient = f"acc:{acc.id}" if acc else "owner"
+        await inbox.push(session, recipient, "ticket_assigned", f"Вам назначено обращение #{ticket.id}", ticket.subject,
+                         link=f"/support?t={ticket.id}")
     await session.commit()
     return await _ticket(session, ticket_id)
 
 
 @router.get("/operators")
-async def operators(admin: StaffDep, session: SessionDep) -> list[dict]:
+async def operators(admin: P("support.view"), session: SessionDep) -> list[dict]:
     """Accounts that can be assigned to tickets."""
     owner = get_settings().admin_username
     rows = (await session.scalars(select(AdminUser).where(AdminUser.is_active.is_(True)).order_by(AdminUser.username))).all()
-    return [{"username": owner, "role": "owner"}] + [{"username": a.username, "role": a.role.value} for a in rows]
+    out = [{"username": owner, "role": "owner"}]
+    for a in rows:
+        if await rbac.account_has(session, a, "support.reply"):
+            out.append({"username": a.username, "role": a.role_slug})
+    return out
