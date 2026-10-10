@@ -124,7 +124,7 @@ export default function Dashboard() {
         <div className="space-y-4">
           <Card title="Популярные категории">
             {!d ? <Skeleton className="h-32" /> : d.categories.length === 0 ? <div className="py-6 text-center text-sm text-muted">Нет продаж за период</div> : (
-              <BarList items={d.categories.map((c) => ({ label: c.title, value: c.revenue, sub: `${c.orders} шт` }))} />
+              <BarList items={d.categories.map((c) => ({ label: c.title, value: c.revenue, sub: `${c.orders} шт` }))} format={(v) => `${compactMoney(v)} грн`} />
             )}
           </Card>
           <Card title="Низкие остатки" action={d && <span className="text-xs text-muted">≤ {d.low_stock_threshold} шт</span>}>

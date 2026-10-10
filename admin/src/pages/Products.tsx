@@ -217,10 +217,10 @@ function Catalog() {
       <Modal open={form !== null} onClose={() => setForm(null)} size="lg" title={form?.id ? 'Редактировать товар' : 'Новый товар'}
         subtitle={form?.created_at ? `ID ${form.id} · создан ${dt(form.created_at)}` : undefined}
         footer={form && <>
-          {form.id && <Btn variant="danger" className="mr-auto" onClick={() => remove(data!.find((x) => x.id === form.id)!)}><Trash2 className="h-4 w-4" /> Удалить</Btn>}
-          {form.id && form.status !== 'archived' && <Btn variant="secondary" onClick={() => setForm({ ...form, status: 'archived' })}><Archive className="h-4 w-4" /> В архив</Btn>}
-          <Btn variant="secondary" onClick={() => setForm(null)}>Отмена</Btn>
-          <Btn loading={busy} onClick={save}>Сохранить</Btn>
+          {form.id && <Btn variant="danger" className="mr-auto" onClick={() => remove(data!.find((x) => x.id === form.id)!)}><Trash2 className="h-4 w-4" /><span className="hidden sm:inline">Удалить</span></Btn>}
+          {form.id && form.status !== 'archived' && <Btn variant="secondary" aria-label="В архив" onClick={() => setForm({ ...form, status: 'archived' })}><Archive className="h-4 w-4" /><span className="hidden sm:inline">В архив</span></Btn>}
+          <Btn variant="secondary" className="hidden sm:inline-flex" onClick={() => setForm(null)}>Отмена</Btn>
+          <Btn className="flex-1 sm:flex-none" loading={busy} onClick={save}>Сохранить</Btn>
         </>}>
         {form && (
           <div className="grid gap-4 sm:grid-cols-2">

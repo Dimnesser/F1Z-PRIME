@@ -23,6 +23,25 @@
   reservation expiry, daily backup, error monitoring). Backups: JSON.gz to `backups` volume, owner download.
 - Tests: `tests/test_admin_panel.py` (18 tests); whole suite 69 passed.
 
-## Stage 2 — Admin frontend ⏳
-## Stage 3 — Mini App (maintenance screen, store profile) ⏳
+## Stage 2 — Admin frontend ✅
+- New design system (palette from the brief, Manrope/Unbounded, Lucide icons): collapsible sidebar,
+  mobile bottom navigation + "Ещё" sheet, skeletons, toasts, confirm dialogs (danger actions, reasons),
+  modals as bottom sheets on phones, tables → cards on small screens, SVG charts with touch tooltips.
+- Pages: Обзор, Заказы, Пользователи, Товары (+категории), Красивые номера, Страны, Финансы,
+  Поддержка (messenger UI), Автоматизация, Настройки (магазин, оплата, уведомления, команда, журнал).
+- Tab-switch crash safety: no expression-bodied effects, stale responses dropped, error boundary per
+  page with auto-reload on stale chunks after deploy; admin index.html served with `no-cache`.
+- framer-motion removed from the admin (CSS animations only); pages lazy-loaded.
+
+## Stage 3 — Mini App ✅
+- Maintenance notice, store description, banner image and links (support/channel/rules) from settings.
+  Purchases/top-ups return 503 during maintenance (Mini App and bot).
+
+## Verification
+- `pytest`: 69 passed. `npm run build` (admin, Mini App): OK.
+- Playwright E2E (desktop 1440 + mobile 390): login, all pages, rapid tab switching ×2, add product,
+  inline price/stock, bulk +10%, user search/profile, complete order (history shown), confirm manual
+  payment, support reply, maintenance on→503→off, store settings in public config;
+  no page errors, no horizontal scroll on mobile.
+
 ## Stage 4 — Deploy to vps4 ⏳
