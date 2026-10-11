@@ -93,8 +93,12 @@ Done (backend, committed, 106 tests pass):
 - Mini App API: order `stage`, `delivered_items` only after delivery, one-tap support ticket per order.
 - Admin API: inventory units (masked), stock history/adjust with reason, order timeline from server records.
 
-Remaining: Stage C (promo codes, product extensions, rules engine WHEN→IF→THEN), Stage D (admin UI for all
-of this + Mini App UI), Stage E (deploy via deploy key with backups, verify).
+Stage C ✅ (commit 67ab448, 116 tests pass): migration 0006 — promo codes (server-side validation under row
+lock, per-user and total limits, scope, window, released on cancel/expiry), product sale price / tags /
+attributes / sale window / per-order & per-user limits / price history / copy / bulk sale & tags, storefront
+settings (sort, out-of-stock) applied, rules engine WHEN→IF→THEN (`services/rules.py`, `api/admin_rules.py`).
+
+Remaining: Stage D (admin UI for all of this + Mini App UI), Stage E (deploy via deploy key with backups, verify).
 
 Continue with: `cd /home/user/F1Z-PRIME && service postgresql start && python3 -m pytest -q` then
 implement the remaining stages listed above (see task list in this file).
