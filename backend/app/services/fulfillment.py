@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 
 from app.models import Order, OrderStatus, Product
-from app.services import incidents, inventory, notifications, rules
+from app.services import incidents, inventory, notifications, phones, rules
 from app.services import settings as settings_service
 from app.services.common import ServiceError, lock, utcnow
 from app.services.orders import add_event
@@ -61,6 +61,9 @@ async def process(session, order_id: int) -> str:  # noqa: ANN001
         if product.uses_inventory:
             items = await inventory.sell_units(session, order, product)
             order.delivery_data = f"Выдано единиц: {len(items)}. Данные доступны в карточке заказа."
+        elif product.uses_phone_inventory:
+            rows = await phones.sell_for_order(session, order, product)
+            order.delivery_data = "\n".join(phones.numbers_of(rows))
         elif product.delivery_note.strip():
             order.delivery_data = product.delivery_note
         else:

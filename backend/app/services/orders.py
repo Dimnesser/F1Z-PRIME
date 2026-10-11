@@ -25,7 +25,7 @@ from app.models import (
     User,
 )
 from app.security import TelegramUser
-from app.services import inventory, jobs, notifications, promo, rules
+from app.services import inventory, jobs, notifications, phones, promo, rules
 from app.services import settings as settings_service
 from app.services.common import ServiceError, change_balance, lock, money, utcnow
 
@@ -239,7 +239,10 @@ async def create_order(
     if product_id is not None:
         if product.uses_inventory:
             await inventory.reserve_units(session, product, order, quantity)
-        inventory.record(session, product, -quantity, "reserved", order_id=order.id, note=f"резерв заказа {order.public_id}")
+        elif product.uses_phone_inventory:
+            await phones.reserve_for_order(session, product, order, quantity)
+        if not product.uses_phone_inventory:
+            inventory.record(session, product, -quantity, "reserved", order_id=order.id, note=f"резерв заказа {order.public_id}")
         add_event(session, order, OrderStatus.pending, "system", OrderStatus.pending, note="Товар зарезервирован")
     if product_id is not None:
         _fix_currency_totals(order, product)
@@ -262,6 +265,7 @@ def _fix_currency_totals(order: Order, product: Product) -> None:
 async def _release_items(session: AsyncSession, order: Order, reason: str = "released") -> None:
     if reason in ("expired", "cancelled"):
         await promo.release(session, order)
+    await phones.release_for_order(session, order)
     if order.product_id:
         product = await lock(session, Product, order.product_id)
         if product is not None:

@@ -159,6 +159,7 @@ class Product(TimestampMixin, Base):
     fulfillment_mode: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual", nullable=False)
     # stock is the count of available encrypted inventory units (license keys, vouchers...)
     uses_inventory: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    uses_phone_inventory: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     # promotional price (shown crossed out against `price`), optionally until sale_ends_at
     sale_price: Mapped[Decimal | None] = mapped_column(Money)
     sale_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -187,7 +188,8 @@ class Product(TimestampMixin, Base):
     def instant(self) -> bool:
         """Delivered automatically right after payment: only with a confirmed stock (uploaded units or a counter
         staff set) and the automatic mode. Manual products are never advertised as instant."""
-        return self.fulfillment_mode == "auto" and self.stock > 0 and (self.uses_inventory or bool(self.delivery_note.strip()))
+        return self.fulfillment_mode == "auto" and self.stock > 0 and (
+            self.uses_inventory or self.uses_phone_inventory or bool(self.delivery_note.strip()))
 
     @property
     def price_now(self) -> Decimal:
@@ -735,3 +737,58 @@ class RuleRun(Base):
     dry_run: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True, nullable=False)
+
+
+class PhoneInventory(Base):
+    """One real phone number in stock. Country is auto-detected from the E.164 number (libphonenumber).
+
+    Stock per country/product is derived by counting AVAILABLE rows — never stored as an independent counter.
+    No Telegram auth codes or session files are stored here; this holds only the sellable phone number itself.
+    """
+
+    __tablename__ = "phone_inventory"
+    __table_args__ = (
+        UniqueConstraint("phone_e164", name="uq_phone_inventory_e164"),
+        Index("ix_phone_inventory_product_status", "product_id", "status"),
+        Index("ix_phone_inventory_country_status", "country_iso2", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    phone_e164: Mapped[str] = mapped_column(String(24), nullable=False)
+    country_iso2: Mapped[str] = mapped_column(String(2), nullable=False)
+    country_name: Mapped[str] = mapped_column(String(64), default="", server_default="", nullable=False)
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(10), default="AVAILABLE", server_default="AVAILABLE", nullable=False)
+    reserved_order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"), index=True)
+    sold_order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"), index=True)
+    batch: Mapped[str | None] = mapped_column(String(64))
+    added_by: Mapped[str] = mapped_column(String(64), default="", server_default="", nullable=False)
+    note: Mapped[str] = mapped_column(String(255), default="", server_default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sold_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PhoneVerification(Base):
+    """Scaffold for a future, authorised number-ownership confirmation flow (mock provider only for now).
+
+    This never reads Telegram login codes or .session files. A real provider can be plugged in later only
+    where a documented, authorised ownership-confirmation API exists.
+    """
+
+    __tablename__ = "phone_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True, nullable=False)
+    phone_id: Mapped[int | None] = mapped_column(ForeignKey("phone_inventory.id", ondelete="SET NULL"))
+    provider: Mapped[str] = mapped_column(String(32), default="mock", server_default="mock", nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="WAITING", server_default="WAITING", index=True, nullable=False)
+    code_masked: Mapped[str | None] = mapped_column(String(32))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

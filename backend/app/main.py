@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import admin, admin_inventory, admin_promo, admin_reports, admin_rules, admin_staff, admin_system, public
+from app.api import admin, admin_inventory, admin_phones, admin_promo, admin_reports, admin_rules, admin_staff, admin_system, public
 from app.config import get_settings
 from app.db import dispose_engine, session_factory
 from app.services import monitor
@@ -97,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_system.router)
     app.include_router(admin_staff.router)
     app.include_router(admin_inventory.router)
+    app.include_router(admin_phones.router)
     app.include_router(admin_promo.router)
     app.include_router(admin_rules.router)
     return app

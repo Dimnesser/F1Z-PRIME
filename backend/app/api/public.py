@@ -16,6 +16,7 @@ from app.models import (
     Category,
     Country,
     InventoryItem,
+    PhoneInventory,
     Order,
     OrderStatus,
     Payment,
@@ -364,6 +365,14 @@ async def _order_detail(session: SessionDep, order: Order) -> OrderDetailOut:
             )
         ).all()
         data.delivered_items = inventory.delivered_secrets(list(units))
+        phone_rows = (
+            await session.scalars(
+                select(PhoneInventory)
+                .where(PhoneInventory.sold_order_id == order.id, PhoneInventory.status == "SOLD")
+                .order_by(PhoneInventory.id)
+            )
+        ).all()
+        data.delivered_items += [r.phone_e164 for r in phone_rows]
     data.support_ticket_id = await session.scalar(
         select(SupportTicket.id)
         .where(SupportTicket.order_id == order.id, SupportTicket.status != TicketStatus.closed)
