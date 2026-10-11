@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.models import OrderStatus, PaymentMethod, PremiumStatus, ProductStatus, TicketStatus
 
@@ -39,10 +39,15 @@ class ProductOut(ORM):
     title: str
     description: str
     category: str
-    price: Money
+    # current price (the sale price while a sale is active); old_price is shown crossed out
+    price: Money = Field(validation_alias=AliasChoices("price_now", "price"))
+    old_price: Money | None = Field(default=None, validation_alias="price_old")
     stock: int
     is_popular: bool
     country: CountryOut | None = None
+    tags: list[str] = []
+    attributes: dict[str, str] = {}
+    max_per_order: int | None = None
 
 
 class PremiumNumberOut(ORM):
@@ -110,6 +115,8 @@ class OrderOut(ORM):
     public_id: str | None = None
     fulfillment_status: str | None = None
     stage: str = ""
+    discount: Money = Decimal("0")
+    promo_code: str | None = None
 
 
 class OrderDetailOut(OrderOut):
@@ -125,6 +132,7 @@ class OrderCreate(BaseModel):
     premium_number_id: int | None = Field(default=None, gt=0)
     quantity: int = Field(default=1, ge=1, le=10)
     idempotency_key: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
+    promo_code: str | None = Field(default=None, max_length=32)
 
 
 class PayRequest(BaseModel):
@@ -250,6 +258,14 @@ class ProductIn(BaseModel):
     delivery_note: str = Field(default="", max_length=4000)
     fulfillment_mode: Literal["auto", "manual", "review"] = "manual"
     uses_inventory: bool = False
+    sale_price: Decimal | None = Field(default=None, gt=0, le=1_000_000, decimal_places=2)
+    sale_ends_at: datetime | None = None
+    tags: list[Annotated[str, Field(min_length=1, max_length=32)]] = Field(default_factory=list, max_length=20)
+    attributes: dict[str, Annotated[str, Field(max_length=200)]] = Field(default_factory=dict, max_length=30)
+    available_from: datetime | None = None
+    available_until: datetime | None = None
+    max_per_order: int | None = Field(default=None, ge=1, le=10)
+    max_per_user: int | None = Field(default=None, ge=1, le=10000)
 
 
 class ProductPatch(BaseModel):
@@ -266,9 +282,24 @@ class ProductPatch(BaseModel):
     fulfillment_mode: Literal["auto", "manual", "review"] | None = None
     uses_inventory: bool | None = None
     stock_reason: str | None = Field(default=None, max_length=200)  # required when stock changes
+    sale_price: Decimal | None = Field(default=None, gt=0, le=1_000_000, decimal_places=2)
+    sale_ends_at: datetime | None = None
+    tags: list[Annotated[str, Field(min_length=1, max_length=32)]] | None = Field(default=None, max_length=20)
+    attributes: dict[str, Annotated[str, Field(max_length=200)]] | None = Field(default=None, max_length=30)
+    available_from: datetime | None = None
+    available_until: datetime | None = None
+    max_per_order: int | None = Field(default=None, ge=1, le=10)
+    max_per_user: int | None = Field(default=None, ge=1, le=10000)
 
 
 class AdminProductOut(ProductOut):
+    price: Money  # base price; the public price may be the sale price
+    old_price: Money | None = None
+    sale_price: Money | None = None
+    sale_ends_at: datetime | None = None
+    available_from: datetime | None = None
+    available_until: datetime | None = None
+    max_per_user: int | None = None
     status: ProductStatus
     fulfillment_mode: str = "manual"
     uses_inventory: bool = False

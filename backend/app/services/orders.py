@@ -22,7 +22,7 @@ from app.models import (
     User,
 )
 from app.security import TelegramUser
-from app.services import inventory, jobs, notifications
+from app.services import inventory, jobs, notifications, promo
 from app.services import settings as settings_service
 from app.services.common import ServiceError, change_balance, lock, money, utcnow
 
@@ -132,6 +132,7 @@ async def create_order(
     product_id: int | None = None,
     premium_number_id: int | None = None,
     quantity: int = 1,
+    promo_code: str | None = None,
 ) -> tuple[Order, bool]:
     """Create an order with stock reservation. Returns (order, created).
 
@@ -163,14 +164,28 @@ async def create_order(
     expires = utcnow() + timedelta(minutes=get_settings().order_ttl_minutes)
     if product_id is not None:
         product = await lock(session, Product, product_id)
-        if product is None or product.status != ProductStatus.active:
+        now = utcnow()
+        if product is None or product.status != ProductStatus.active or not product.on_sale_window(now):
             raise ServiceError("Товар недоступен", 404, "not_found")
+        if product.max_per_order and quantity > product.max_per_order:
+            raise ServiceError(f"Не более {product.max_per_order} шт. в одном заказе", 422, "max_per_order")
+        if product.max_per_user:
+            had = await session.scalar(
+                select(func.coalesce(func.sum(Order.quantity), 0)).where(
+                    Order.user_id == user.id, Order.product_id == product.id,
+                    Order.status.not_in([OrderStatus.cancelled, OrderStatus.expired, OrderStatus.refunded]),
+                )
+            )
+            if (had or 0) + quantity > product.max_per_user:
+                raise ServiceError(f"Лимит: не более {product.max_per_user} шт. этого товара на покупателя", 429, "user_limit")
         if product.stock < quantity:
             raise ServiceError("Недостаточно товара в наличии", 409, "out_of_stock")
         product.stock -= quantity
         title = product.title
-        unit_price = money(product.price)  # price always from the database, never from the client
+        unit_price = money(product.effective_price(now))  # price always from the database, never from the client
     else:
+        if promo_code:
+            raise ServiceError("Промокоды не действуют на красивые номера", 422, "promo_scope")
         number = await lock(session, PremiumNumber, premium_number_id)  # type: ignore[arg-type]
         if number is None or number.status != PremiumStatus.available:
             raise ServiceError("Номер уже забронирован или продан", 409, "unavailable")
@@ -214,6 +229,10 @@ async def create_order(
     await session.flush()
     order.public_id = f"F1Z-{order.id:06d}"
     add_event(session, order, OrderStatus.pending, f"user:{user.telegram_id}")
+    if promo_code:
+        discount = await promo.apply(session, locked_user, order, product, promo_code)
+        add_event(session, order, OrderStatus.pending, "system", OrderStatus.pending,
+                  note=f"Промокод {order.promo_code}: скидка {discount} грн")
     if product_id is not None:
         if product.uses_inventory:
             await inventory.reserve_units(session, product, order, quantity)
@@ -224,6 +243,8 @@ async def create_order(
 
 
 async def _release_items(session: AsyncSession, order: Order, reason: str = "released") -> None:
+    if reason in ("expired", "cancelled"):
+        await promo.release(session, order)
     if order.product_id:
         product = await lock(session, Product, order.product_id)
         if product is not None:

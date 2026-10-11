@@ -53,6 +53,7 @@ from app.services import orders as order_service
 from app.services import payments as payment_service
 from app.services import settings as settings_service
 from app.services import fulfillment, inventory, monitor, notifications
+from app.services import promo as promo_service
 from app.services import support as support_service
 from app.services.common import utcnow
 
@@ -119,13 +120,21 @@ async def _country_catalog(session: SessionDep) -> list[CountryCatalogOut]:
     countries = (
         await session.scalars(select(Country).where(Country.is_active).order_by(Country.sort_order, Country.name))
     ).all()
-    products = (
-        await session.scalars(
-            select(Product)
-            .where(Product.status == ProductStatus.active, Product.category == "numbers", Product.country_id.is_not(None))
-            .order_by(Product.price)
-        )
-    ).all()
+    now = utcnow()
+    products = sorted(
+        (
+            p for p in (
+                await session.scalars(
+                    select(Product).where(
+                        Product.status == ProductStatus.active, Product.category == "numbers",
+                        Product.country_id.is_not(None),
+                    )
+                )
+            ).unique().all()
+            if p.on_sale_window(now)
+        ),
+        key=lambda p: p.effective_price(now),
+    )
     by_country: dict[int, list[Product]] = {}
     for p in products:
         by_country.setdefault(p.country_id, []).append(p)  # type: ignore[arg-type]
@@ -140,7 +149,7 @@ async def _country_catalog(session: SessionDep) -> list[CountryCatalogOut]:
                     exclude={"product_id", "price", "stock"}
                 ),
                 product_id=main.id if main else None,
-                price=main.price if main else None,
+                price=main.effective_price(now) if main else None,
                 stock=sum(p.stock for p in items),
             )
         )
@@ -185,6 +194,7 @@ async def products(
     country_id: int | None = None,
     category: str | None = Query(default=None, max_length=32),
     popular: bool | None = None,
+    tag: str | None = Query(default=None, max_length=32),
 ) -> list[Product]:
     stmt = select(Product).where(Product.status == ProductStatus.active)
     if country_id:
@@ -193,15 +203,52 @@ async def products(
         stmt = stmt.where(Product.category == category)
     if popular:
         stmt = stmt.where(Product.is_popular)
-    return list((await session.scalars(stmt.order_by(Product.sort_order, Product.id))).all())
+    rows = list((await session.scalars(stmt.order_by(Product.sort_order, Product.id))).unique().all())
+    return await _storefront(session, rows, tag)
+
+
+async def _storefront(session: SessionDep, rows: list[Product], tag: str | None = None) -> list[Product]:
+    """Applies the store settings: sale window, out-of-stock visibility and catalog sort order."""
+    now = utcnow()
+    rows = [p for p in rows if p.on_sale_window(now) and (not tag or tag in (p.tags or []))]
+    if not await settings_service.get_bool(session, "show_out_of_stock"):
+        rows = [p for p in rows if p.stock > 0]
+    sort = await settings_service.get_value(session, "catalog_sort")
+    if sort == "price_asc":
+        rows.sort(key=lambda p: p.effective_price(now))
+    elif sort == "price_desc":
+        rows.sort(key=lambda p: p.effective_price(now), reverse=True)
+    elif sort == "popular":
+        rows.sort(key=lambda p: (not p.is_popular, p.sort_order, p.id))
+    elif sort == "new":
+        rows.sort(key=lambda p: p.id, reverse=True)
+    return rows
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
 async def product_detail(product_id: int, session: SessionDep) -> Product:
     product = await session.get(Product, product_id)
-    if product is None or product.status != ProductStatus.active:
+    if product is None or product.status != ProductStatus.active or not product.on_sale_window(utcnow()):
         raise HTTPException(404, "Товар не найден")
     return product
+
+
+class PromoCheck(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    product_id: int = Field(gt=0)
+    quantity: int = Field(default=1, ge=1, le=10)
+
+
+@router.post("/promo/check")
+async def promo_check(body: PromoCheck, user: UserDep, session: SessionDep) -> dict:
+    """Preview of a promo code discount. The order applies it again on the server, under a lock."""
+    product = await session.get(Product, body.product_id)
+    if product is None or product.status != ProductStatus.active:
+        raise HTTPException(404, "Товар не найден")
+    subtotal = product.effective_price(utcnow()) * body.quantity
+    res = await promo_service.preview(session, user, body.code, product, subtotal)
+    return {"code": res["code"], "discount": float(res["discount"]), "total": float(res["total"]),
+            "subtotal": float(subtotal)}
 
 
 @router.get("/premium-numbers", response_model=list[PremiumNumberOut])
@@ -270,6 +317,7 @@ async def create_order(body: OrderCreate, user: UserDep, session: SessionDep) ->
         product_id=body.product_id,
         premium_number_id=body.premium_number_id,
         quantity=body.quantity,
+        promo_code=body.promo_code or None,
     )
     if created:
         await notifications.notify_customer(session, order, "order_created")  # off by default (template switch)

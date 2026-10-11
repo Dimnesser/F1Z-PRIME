@@ -135,6 +135,7 @@ class Product(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("price > 0", name="ck_products_price_positive"),
         CheckConstraint("stock >= 0", name="ck_products_stock_non_negative"),
+        CheckConstraint("sale_price IS NULL OR sale_price > 0", name="ck_products_sale_price_positive"),
         Index("ix_products_status_category", "status", "category"),
     )
 
@@ -156,8 +157,41 @@ class Product(TimestampMixin, Base):
     fulfillment_mode: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual", nullable=False)
     # stock is the count of available encrypted inventory units (license keys, vouchers...)
     uses_inventory: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # promotional price (shown crossed out against `price`), optionally until sale_ends_at
+    sale_price: Mapped[Decimal | None] = mapped_column(Money)
+    sale_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}", nullable=False)
+    # sale window: outside it the product is hidden from the catalog and can't be ordered
+    available_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    available_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    max_per_order: Mapped[int | None] = mapped_column(Integer)
+    max_per_user: Mapped[int | None] = mapped_column(Integer)  # lifetime, paid + pending orders
 
     country: Mapped[Country | None] = relationship(back_populates="products", lazy="joined")
+
+    def sale_active(self, now: datetime) -> bool:
+        return self.sale_price is not None and (self.sale_ends_at is None or self.sale_ends_at > now)
+
+    def effective_price(self, now: datetime) -> Decimal:
+        return self.sale_price if self.sale_active(now) else self.price  # type: ignore[return-value]
+
+    @property
+    def price_now(self) -> Decimal:
+        from app.services.common import utcnow
+
+        return self.effective_price(utcnow())
+
+    @property
+    def price_old(self) -> Decimal | None:
+        from app.services.common import utcnow
+
+        return self.price if self.sale_active(utcnow()) else None
+
+    def on_sale_window(self, now: datetime) -> bool:
+        return (self.available_from is None or self.available_from <= now) and (
+            self.available_until is None or self.available_until > now
+        )
 
 
 class PremiumNumber(TimestampMixin, Base):
@@ -215,6 +249,8 @@ class Order(TimestampMixin, Base):
     fulfillment_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     fulfillment_error: Mapped[str | None] = mapped_column(String(500))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0", nullable=False)
+    promo_code: Mapped[str | None] = mapped_column(String(32))
 
     user: Mapped[User] = relationship(back_populates="orders", lazy="joined")
     product: Mapped[Product | None] = relationship(lazy="joined")
@@ -589,3 +625,97 @@ class AdminPrefs(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True, nullable=False)
+    field: Mapped[str] = mapped_column(String(16), nullable=False)  # price | sale_price
+    old_value: Mapped[Decimal | None] = mapped_column(Money)
+    new_value: Mapped[Decimal | None] = mapped_column(Money)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PromoCode(Base):
+    """Discount code. Validated and applied only on the server, under a row lock (usage limits are exact)."""
+
+    __tablename__ = "promo_codes"
+    __table_args__ = (
+        CheckConstraint("value > 0", name="ck_promo_value_positive"),
+        CheckConstraint("used_count >= 0", name="ck_promo_used_non_negative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)  # percent | fixed
+    value: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    min_total: Mapped[Decimal | None] = mapped_column(Money)
+    max_discount: Mapped[Decimal | None] = mapped_column(Money)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    max_uses: Mapped[int | None] = mapped_column(Integer)
+    max_uses_per_user: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    used_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    product_ids: Mapped[list[int]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    categories: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    first_order_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    note: Mapped[str] = mapped_column(String(255), default="", server_default="", nullable=False)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PromoRedemption(Base):
+    __tablename__ = "promo_redemptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    promo_id: Mapped[int] = mapped_column(ForeignKey("promo_codes.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), unique=True, nullable=False)
+    discount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AutomationRule(Base):
+    """WHEN <trigger> IF <conditions> THEN <actions>. Declarative JSON, evaluated by a whitelist engine (no eval)."""
+
+    __tablename__ = "automation_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    conditions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    match: Mapped[str] = mapped_column(String(4), default="all", server_default="all", nullable=False)  # all | any
+    actions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=100, server_default="100", nullable=False)
+    runs: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    matches: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class RuleRun(Base):
+    __tablename__ = "rule_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("automation_rules.id", ondelete="CASCADE"), index=True, nullable=False)
+    event: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_id: Mapped[int | None] = mapped_column(Integer)
+    matched: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True, nullable=False)
