@@ -71,8 +71,18 @@ async def handle_refund_stars(payload: dict) -> None:
         log.info("refund %s -> %s", payload["refund_id"], result)
 
 
+async def handle_rules(payload: dict) -> None:
+    from app.services import rules
+
+    async with session_factory()() as session:
+        n = await rules.run_event(session, str(payload["event"]), int(payload["entity_id"]))
+        await session.commit()
+        log.info("rules for %s #%s: %s matched", payload["event"], payload["entity_id"], n)
+
+
 HANDLERS: dict[str, Callable[[dict], Awaitable[None]]] = {
     "fulfill": handle_fulfill,
+    "rules": handle_rules,
     "tg_message": handle_tg_message,
     "refund_stars": handle_refund_stars,
 }

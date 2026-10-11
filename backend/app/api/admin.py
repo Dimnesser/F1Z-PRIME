@@ -36,6 +36,7 @@ from app.models import (
     PaymentStatus,
     PremiumNumber,
     PremiumStatus,
+    PriceHistory,
     Product,
     ProductStatus,
     SupportMessage,
@@ -523,6 +524,7 @@ async def create_product(body: ProductIn, admin: P("products.edit"), session: Se
     await _check_category(session, body.category)
     if body.price is not None and not admin.can("products.price"):
         raise HTTPException(403, "Недостаточно прав: Изменять цены")
+    _check_sale(body.price, body.sale_price, body.available_from, body.available_until)
     data = body.model_dump()
     if data["uses_inventory"]:
         data["stock"] = 0  # inventory-backed: stock comes from uploaded units
@@ -531,6 +533,7 @@ async def create_product(body: ProductIn, admin: P("products.edit"), session: Se
     await session.flush()
     if product.stock:
         inventory.record(session, product, product.stock, "initial", actor=str(admin), note="начальный остаток")
+    session.add(PriceHistory(product_id=product.id, field="price", old_value=None, new_value=product.price, actor=str(admin)))
     log_admin(session, admin, "create", "product", product.id, **body.model_dump())
     await session.commit()
     return await session.get(Product, product.id, populate_existing=True)  # type: ignore[return-value]
@@ -550,6 +553,19 @@ async def update_product(product_id: int, body: ProductPatch, admin: P("products
         await _check_category(session, changes["category"])
     if changes.get("price") is not None and Decimal(changes["price"]) != Decimal(product.price):
         _check_price_change(admin, Decimal(product.price), Decimal(changes["price"]))
+        session.add(PriceHistory(product_id=product.id, field="price", old_value=product.price,
+                                 new_value=changes["price"], actor=str(admin)))
+    if "price" in changes and changes["price"] is None:
+        changes.pop("price")
+    if "sale_price" in changes and changes["sale_price"] != product.sale_price:
+        if not admin.can("products.price"):
+            raise HTTPException(403, "Недостаточно прав: Изменять цены")
+        session.add(PriceHistory(product_id=product.id, field="sale_price", old_value=product.sale_price,
+                                 new_value=changes["sale_price"], actor=str(admin)))
+    _check_sale(
+        changes.get("price", product.price), changes.get("sale_price", product.sale_price),
+        changes.get("available_from", product.available_from), changes.get("available_until", product.available_until),
+    )
     if changes.get("fulfillment_mode") is not None and changes["fulfillment_mode"] not in ("auto", "manual", "review"):
         raise HTTPException(422, "Режим выдачи: auto, manual или review")
     if changes.get("uses_inventory") is not None and changes["uses_inventory"] != product.uses_inventory:
@@ -566,7 +582,7 @@ async def update_product(product_id: int, body: ProductPatch, admin: P("products
         changes.pop("uses_inventory", None)
     before = {k: getattr(product, k) for k in changes}
     for k, v in changes.items():
-        if v is None and k != "country_id":
+        if v is None and k not in NULLABLE_PRODUCT_FIELDS:
             continue
         setattr(product, k, v)
     if new_stock is not None and new_stock != product.stock:
@@ -581,6 +597,21 @@ async def update_product(product_id: int, body: ProductPatch, admin: P("products
     return await session.get(Product, product.id, populate_existing=True)  # type: ignore[return-value]
 
 
+def _num(v: Decimal | None) -> float | None:
+    return None if v is None else float(v)
+
+
+NULLABLE_PRODUCT_FIELDS = {"country_id", "sale_price", "sale_ends_at", "available_from", "available_until",
+                           "max_per_order", "max_per_user"}
+
+
+def _check_sale(price, sale_price, available_from, available_until) -> None:  # noqa: ANN001
+    if sale_price is not None and price is not None and Decimal(sale_price) >= Decimal(price):
+        raise HTTPException(422, "Акционная цена должна быть ниже обычной")
+    if available_from and available_until and available_from >= available_until:
+        raise HTTPException(422, "Окончание продаж должно быть позже начала")
+
+
 def _check_price_change(admin, old: Decimal, new: Decimal) -> None:  # noqa: ANN001
     if not admin.can("products.price"):
         raise HTTPException(403, "Недостаточно прав: Изменять цены")
@@ -589,6 +620,36 @@ def _check_price_change(admin, old: Decimal, new: Decimal) -> None:  # noqa: ANN
         pct = abs(new - old) / old * 100
         if pct > Decimal(str(limit)):
             raise HTTPException(403, f"Изменение цены на {pct:.0f}% превышает лимит роли ({limit}%)")
+
+
+@router.post("/products/{product_id}/copy", response_model=AdminProductOut, status_code=201)
+async def copy_product(product_id: int, admin: P("products.edit"), session: SessionDep) -> Product:
+    """Hidden copy with the same settings; stock and inventory units are not copied."""
+    src = await session.get(Product, product_id)
+    if src is None:
+        raise HTTPException(404, "Товар не найден")
+    fields = ("description", "category", "country_id", "price", "is_popular", "sort_order", "delivery_note",
+              "fulfillment_mode", "uses_inventory", "sale_price", "sale_ends_at", "tags", "attributes",
+              "available_from", "available_until", "max_per_order", "max_per_user")
+    copy = Product(title=f"{src.title} (копия)"[:128], stock=0, status=ProductStatus.hidden,
+                   **{f: getattr(src, f) for f in fields})
+    session.add(copy)
+    await session.flush()
+    session.add(PriceHistory(product_id=copy.id, field="price", old_value=None, new_value=copy.price, actor=str(admin)))
+    log_admin(session, admin, "copy", "product", copy.id, source=src.id)
+    await session.commit()
+    return await session.get(Product, copy.id, populate_existing=True)  # type: ignore[return-value]
+
+
+@router.get("/products/{product_id}/price-history")
+async def price_history(product_id: int, admin: P("products.view"), session: SessionDep) -> list[dict]:
+    rows = (
+        await session.scalars(
+            select(PriceHistory).where(PriceHistory.product_id == product_id).order_by(PriceHistory.id.desc()).limit(200)
+        )
+    ).all()
+    return [{"id": r.id, "field": r.field, "old": _num(r.old_value), "new": _num(r.new_value), "actor": r.actor,
+             "created_at": r.created_at} for r in rows]
 
 
 @router.delete("/products/{product_id}")
@@ -612,7 +673,8 @@ async def delete_product(product_id: int, admin: P("products.delete"), session: 
 async def bulk_products(body: ProductBulk, admin: AdminDep, session: SessionDep) -> dict:
     """Mass update. Validates every product first; nothing is saved if any row would become invalid."""
     need = {"status": "products.edit", "category": "products.edit", "stock_set": "products.stock",
-            "stock_delta": "products.stock"}.get(body.action, "products.price")
+            "stock_delta": "products.stock", "tag_add": "products.edit", "tag_remove": "products.edit"}.get(
+        body.action, "products.price")
     if not admin.can(need):
         raise HTTPException(403, f"Недостаточно прав: {rbac.PERMISSIONS[need][1]}")
     bulk_max = admin.limits.get("bulk_max")
@@ -633,8 +695,15 @@ async def bulk_products(body: ProductBulk, admin: AdminDep, session: SessionDep)
             await _check_category(session, value)
         elif body.action in ("stock_set", "stock_delta"):
             number = int(value)
+        elif body.action in ("tag_add", "tag_remove"):
+            if not 1 <= len(value) <= 32:
+                raise ValueError
+        elif body.action == "sale_clear":
+            pass
         else:
             amount = Decimal(value)
+            if body.action == "sale_percent" and not Decimal(1) <= amount <= Decimal(95):
+                raise HTTPException(422, "Скидка акции — от 1 до 95%")
     except (ValueError, InvalidOperation):
         raise HTTPException(422, "Некорректное значение") from None
 
@@ -648,6 +717,14 @@ async def bulk_products(body: ProductBulk, admin: AdminDep, session: SessionDep)
             changes.append((p, "stock", number))
         elif body.action == "stock_delta":
             changes.append((p, "stock", p.stock + number))
+        elif body.action == "tag_add":
+            changes.append((p, "tags", sorted(set(p.tags or []) | {value})[:20]))
+        elif body.action == "tag_remove":
+            changes.append((p, "tags", [t for t in (p.tags or []) if t != value]))
+        elif body.action == "sale_clear":
+            changes.append((p, "sale_price", None))
+        elif body.action == "sale_percent":
+            changes.append((p, "sale_price", money(Decimal(p.price) * (Decimal(100) - amount) / Decimal(100))))
         else:
             if body.action == "price_set":
                 price = amount
@@ -669,6 +746,9 @@ async def bulk_products(body: ProductBulk, admin: AdminDep, session: SessionDep)
                 raise HTTPException(409, f"Остаток «{p.title}» считается по единицам товара")
             await inventory.adjust_stock(session, p, int(new), reason=f"массовое изменение ({body.action})", actor=str(admin))  # type: ignore[arg-type]
         else:
+            if field in ("price", "sale_price") and getattr(p, field) != new:
+                session.add(PriceHistory(product_id=p.id, field=field, old_value=getattr(p, field), new_value=new,
+                                         actor=str(admin)))
             setattr(p, field, new)
     log_admin(session, admin, "bulk_" + body.action, "product", None, ids=[p.id for p in products], value=value)
     await session.commit()
@@ -1036,7 +1116,7 @@ async def order_detail(order_id: int, admin: P("orders.view"), session: SessionD
         },
         # staff never see decrypted secrets: masked labels only
         "units": [{"id": u.id, "label": u.label, "status": u.status} for u in units],
-        "refunds": [{"id": r.id, "amount": r.amount, "method": r.method, "status": r.status, "reason": r.reason,
+        "refunds": [{"id": r.id, "amount": float(r.amount), "method": r.method, "status": r.status, "reason": r.reason,
                      "requested_by": r.requested_by, "error": r.error, "created_at": r.created_at,
                      "completed_at": r.completed_at} for r in refund_rows],
         "refund_methods": refunds.available_methods(order, payment)

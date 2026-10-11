@@ -397,7 +397,8 @@ class OrderEventOut(ORM):
 
 class ProductBulk(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
-    action: Literal["status", "price_set", "price_percent", "price_delta", "stock_set", "stock_delta", "category"]
+    action: Literal["status", "price_set", "price_percent", "price_delta", "stock_set", "stock_delta", "category",
+                    "sale_percent", "sale_clear", "tag_add", "tag_remove"]
     value: str = Field(max_length=64)
 
 

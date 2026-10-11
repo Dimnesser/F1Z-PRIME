@@ -148,10 +148,13 @@ async def notify_customer(session: AsyncSession, order: Order, event: str, *, de
 
 async def staff_recipients(session: AsyncSession, kind: str) -> list[int]:
     """Owner + ADMIN_TELEGRAM_IDS + active staff accounts with a linked Telegram id that hold the permission."""
+    return await recipients_with_permission(session, STAFF_KIND_PERMISSION.get(kind))
+
+
+async def recipients_with_permission(session: AsyncSession, perm: str | None) -> list[int]:
     from app.services import rbac
 
     ids = list(get_settings().admin_ids)
-    perm = STAFF_KIND_PERMISSION.get(kind)
     accounts = (
         await session.scalars(select(AdminUser).where(AdminUser.is_active.is_(True), AdminUser.telegram_id.is_not(None)))
     ).all()

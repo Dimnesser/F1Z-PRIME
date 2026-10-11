@@ -54,6 +54,7 @@ from app.services import payments as payment_service
 from app.services import settings as settings_service
 from app.services import fulfillment, inventory, monitor, notifications
 from app.services import promo as promo_service
+from app.services import rules
 from app.services import support as support_service
 from app.services.common import utcnow
 
@@ -422,6 +423,7 @@ async def submit_manual(payment_id: int, body: ManualSubmit, user: UserDep, sess
     }
     if order is not None:
         await notifications.notify_customer(session, order, "payment_review", dedupe=f"payment_review:{payment.id}")
+        await rules.fire(session, "payment_review", order.id)
     await notifications.notify_staff(session, "staff_payment_review", values, dedupe=f"review:{payment.id}")
     await session.commit()
     return payment

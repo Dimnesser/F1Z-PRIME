@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 
 from app.models import Order, OrderStatus, Product
-from app.services import incidents, inventory, notifications
+from app.services import incidents, inventory, notifications, rules
 from app.services import settings as settings_service
 from app.services.common import ServiceError, lock, utcnow
 from app.services.orders import add_event
@@ -49,6 +49,9 @@ async def process(session, order_id: int) -> str:  # noqa: ANN001
 
     if mode == "review":
         return await _hand_over(session, order, "review", "Заказ требует проверки перед выдачей")
+    held_by = await rules.should_hold(session, order)
+    if held_by:
+        return await _hand_over(session, order, "review", f"Задержан правилом «{held_by}»")
     if mode != "auto" or not auto_enabled or product is None:
         reason = "Автовыдача выключена в настройках" if mode == "auto" and not auto_enabled else "Ручная выдача"
         return await _hand_over(session, order, "manual", reason)
@@ -76,6 +79,7 @@ async def process(session, order_id: int) -> str:  # noqa: ANN001
     add_event(session, order, OrderStatus.completed, "auto:fulfillment", old, note="Товар выдан автоматически")
     await incidents.resolve_for_order(session, order.id, ["fulfillment_failed", "stuck_order"], "auto")
     await notifications.notify_customer(session, order, "order_delivered")
+    await rules.fire(session, "order_delivered", order.id)
     return "delivered"
 
 
@@ -104,6 +108,7 @@ async def mark_failed(session, order_id: int, error: str) -> None:  # noqa: ANN0
         order_id=order.id, details={"error": error[:500]}, dedupe_key=f"fulfillment_failed:{order.id}",
     )
     await notifications.notify_customer(session, order, "order_problem")
+    await rules.fire(session, "fulfillment_failed", order.id)
     await notifications.notify_staff(
         session, "staff_fulfillment_failed", notifications.order_values(order, reason=error[:300]), dedupe=f"ff:{order.id}"
     )

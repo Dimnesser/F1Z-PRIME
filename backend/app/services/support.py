@@ -64,6 +64,9 @@ async def create_ticket(
     session.add(ticket)
     await session.flush()
     order_part = f" · заказ {order.public_id or order.id}" if order else ""
+    from app.services import rules
+
+    await rules.fire(session, "ticket_created", ticket.id)
     await notifications.notify_staff(
         session, "staff_new_ticket",
         {"ticket_id": f"#{ticket.id}", "reason": f"{CATEGORIES[category]}{order_part}\n{text.strip()[:400]}"},

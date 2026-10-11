@@ -22,7 +22,7 @@ from app.models import (
     User,
 )
 from app.security import TelegramUser
-from app.services import inventory, jobs, notifications, promo
+from app.services import inventory, jobs, notifications, promo, rules
 from app.services import settings as settings_service
 from app.services.common import ServiceError, change_balance, lock, money, utcnow
 
@@ -238,6 +238,7 @@ async def create_order(
             await inventory.reserve_units(session, product, order, quantity)
         inventory.record(session, product, -quantity, "reserved", order_id=order.id, note=f"резерв заказа {order.public_id}")
         add_event(session, order, OrderStatus.pending, "system", OrderStatus.pending, note="Товар зарезервирован")
+    await rules.fire(session, "order_created", order.id)
     log.info("order %s created by user %s total=%s", order.id, user.telegram_id, order.total)
     return order, True
 
@@ -291,6 +292,7 @@ async def mark_paid(session: AsyncSession, order: Order, method: str, actor: str
     await notifications.notify_staff(
         session, "staff_new_sale", notifications.order_values(order), dedupe=f"sale:{order.id}"
     )
+    await rules.fire(session, "order_paid", order.id)
     big = await settings_service.get_decimal(session, "big_order_threshold", "0")
     if big > 0 and money(order.total) >= big:
         await notifications.notify_staff(session, "staff_big_order", notifications.order_values(order), dedupe=f"big:{order.id}")
@@ -316,10 +318,12 @@ async def change_status(
     if new_status in (OrderStatus.cancelled, OrderStatus.expired):
         await _release_items(session, order, "expired" if new_status == OrderStatus.expired else "cancelled")
         await _cancel_open_payments(session, order.id)
+        await rules.fire(session, "order_cancelled", order.id)
     elif new_status == OrderStatus.refunded:
         await refund_to_balance(session, order, actor=actor, reason=admin_note or "Возврат на баланс")
     elif new_status == OrderStatus.completed:
         order.completed_at = order.delivered_at = utcnow()
+        await rules.fire(session, "order_delivered", order.id)
         order.fulfillment_status = "delivered"
         order.fulfillment_error = None
         if order.product_id:

@@ -35,6 +35,7 @@ from app.db import dispose_engine, session_factory  # noqa: E402
 from app.security import sign_init_data  # noqa: E402
 
 TABLES = [
+    "rule_runs", "automation_rules", "promo_redemptions", "promo_codes", "price_history",
     "inventory_items", "stock_movements", "jobs", "task_runs", "incidents", "refunds", "notification_templates",
     "approval_requests", "staff_notifications", "admin_prefs", "roles",
     "order_events", "notification_outbox", "admin_users", "categories",
