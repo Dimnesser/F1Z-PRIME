@@ -55,6 +55,8 @@ export const api = {
     post<Order>('/api/orders', body),
   checkPromo: (code: string, product_id: number, quantity: number) =>
     post<PromoPreview>('/api/promo/check', { code, product_id, quantity }),
+  countryRequest: (country: string, quantity: number, comment: string) =>
+    post<TicketDetail>('/api/support/country-request', { country, quantity, comment }),
   supportCategories: () => request<SupportCategory[]>('/api/support/categories'),
   orderSupport: (orderId: number, category: string, text = '') =>
     post<TicketDetail>(`/api/orders/${orderId}/support`, { category, text }),

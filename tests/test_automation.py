@@ -115,7 +115,7 @@ async def test_reservation_expiry_releases_unit(client, admin_headers, user_head
 
 # 6. "I paid" never marks an order paid by itself
 async def test_i_paid_button_does_not_mark_paid(client, user_headers):
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "ipaid-0001"}, headers=user_headers)).json()
     pay = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "manual"}, headers=user_headers)).json()["payment"]
     await client.post(f"/api/payments/{pay['id']}/submit", json={"comment": "оплатил"}, headers=user_headers)
@@ -150,7 +150,7 @@ async def test_duplicate_stars_event_single_delivery(client, admin_headers, user
 # 8. Stars amount mismatch is not confirmed and opens a critical incident
 async def test_stars_mismatch_incident(client, admin_headers, user_headers):
     await client.put("/api/admin/settings", json={"values": {"stars_enabled": "true"}}, headers=admin_headers)
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "mismatch-01"}, headers=user_headers)).json()
     data = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "stars"}, headers=user_headers)).json()
     async with session_factory()() as s:
@@ -281,7 +281,7 @@ async def test_notification_retry_on_network_error(client, monkeypatch):
 # 15. refund to balance once; a second refund is rejected
 async def test_refund_balance_no_double(client, admin_headers, user_headers):
     await _fund(client, admin_headers, user_headers, "100")
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     res = await _buy(client, user_headers, pid, "refund-0001")
     oid = res["order"]["id"]
     r = await client.post(f"/api/admin/orders/{oid}/refund", json={"method": "balance", "reason": "клиент передумал"},
@@ -296,7 +296,7 @@ async def test_refund_balance_no_double(client, admin_headers, user_headers):
 # 16. Stars refund goes through refundStarPayment; ALREADY_REFUNDED counts as success, nothing doubles
 async def test_stars_refund_via_api(client, admin_headers, user_headers, telegram_calls):
     await client.put("/api/admin/settings", json={"values": {"stars_enabled": "true"}}, headers=admin_headers)
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "starsref-01"}, headers=user_headers)).json()
     data = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "stars"}, headers=user_headers)).json()
     async with session_factory()() as s:
@@ -317,7 +317,7 @@ async def test_stars_refund_via_api(client, admin_headers, user_headers, telegra
 
 # 17. manual refund is not marked successful until an operator confirms the transfer
 async def test_manual_refund_needs_confirmation(client, admin_headers, user_headers):
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "manref-001"}, headers=user_headers)).json()
     pay = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "manual"}, headers=user_headers)).json()["payment"]
     await client.post(f"/api/payments/{pay['id']}/submit", json={"comment": "карта"}, headers=user_headers)
@@ -336,7 +336,7 @@ async def test_manual_refund_needs_confirmation(client, admin_headers, user_head
 # 18. payment arriving after the order was closed goes to the balance and is flagged
 async def test_late_payment_to_balance(client, admin_headers, user_headers):
     await client.put("/api/admin/settings", json={"values": {"stars_enabled": "true"}}, headers=admin_headers)
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "late-00001"}, headers=user_headers)).json()
     data = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "stars"}, headers=user_headers)).json()
     async with session_factory()() as s:
@@ -354,7 +354,7 @@ async def test_late_payment_to_balance(client, admin_headers, user_headers):
 # 19. one-tap support ticket linked to the order, reused for repeated taps
 async def test_order_support_ticket(client, admin_headers, user_headers):
     await _fund(client, admin_headers, user_headers)
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     res = await _buy(client, user_headers, pid, "support-001")
     oid = res["order"]["id"]
     r = await client.post(f"/api/orders/{oid}/support", json={"category": "not_received"}, headers=user_headers)
@@ -373,7 +373,7 @@ async def test_order_support_ticket(client, admin_headers, user_headers):
 # 20. automation center: overview, timeline, job retry, dead jobs counted
 async def test_automation_center_and_timeline(client, admin_headers, user_headers):
     await _fund(client, admin_headers, user_headers)
-    pid = (await client.get("/api/products")).json()[0]["id"]
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
     res = await _buy(client, user_headers, pid, "center-0001")
     await run_jobs()
     ov = (await client.get("/api/admin/automation/overview", headers=admin_headers))

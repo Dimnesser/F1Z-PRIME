@@ -75,6 +75,16 @@ export default function Settings() {
             { key: 'rules_url', label: 'Правила магазина', placeholder: 'https://telegra.ph/…' },
             { key: 'refund_policy', label: 'Правила возвратов', multiline: true, hint: 'Показываются покупателю в Mini App' },
           ]} />
+          <SettingsSection title="Гарантия" {...sect} fields={[
+            { key: 'guarantee_enabled', label: 'Показывать блок гарантии', hint: 'На странице товара, в каталоге стран и при оформлении заказа' },
+            { key: 'guarantee_title', label: 'Заголовок', placeholder: 'Гарантия 14 дней' },
+            { key: 'guarantee_days', label: 'Срок, дней' },
+            { key: 'guarantee_text', label: 'Условия', multiline: true, hint: 'Например: замена или возврат 80% стоимости после проверки обращения' },
+            { key: 'guarantee_categories', label: 'Категории с гарантией', placeholder: 'numbers,accounts', hint: 'Коды категорий через запятую (см. Товары → Категории)' },
+          ]} />
+          <SettingsSection title="Заказ стран вне каталога" {...sect} fields={[
+            { key: 'country_requests_enabled', label: 'Кнопка «Нет нужной страны?» в Mini App', hint: 'Создаёт обращение в поддержку с категорией «Заказ страны вне каталога»; оплата не списывается' },
+          ]} />
           {!manage && <p className="text-xs text-muted">У вашей роли нет права менять настройки магазина — они доступны только для просмотра.</p>}
           {canTeam && (
             <Link to="/team" className="card flex items-center gap-3 p-4 transition hover:bg-white/[0.03] sm:p-5">

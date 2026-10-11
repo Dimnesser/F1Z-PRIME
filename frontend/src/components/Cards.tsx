@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
 import { ChevronRight, Gem, Package } from 'lucide-react'
-import { money } from '../lib/format'
+import { money, stars, usd } from '../lib/format'
 import type { CountryCatalog, PremiumNumber, Product } from '../lib/types'
 
 export function CountryCard({ c, onBuy, onOpen }: { c: CountryCatalog; onBuy: () => void; onOpen: () => void }) {
@@ -29,8 +29,13 @@ export function CountryCard({ c, onBuy, onOpen }: { c: CountryCatalog; onBuy: ()
             )}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="font-display text-[17px] font-bold">{money(c.price)}</div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div className="font-display text-[17px] font-bold leading-none">{money(c.price)}</div>
+          {(c.price_usd || c.price_stars) && (
+            <div className="whitespace-nowrap text-[11.5px] font-semibold text-muted">
+              {usd(c.price_usd)}{c.price_usd && c.price_stars ? ' · ' : ''}{c.price_stars ? stars(c.price_stars) : ''}
+            </div>
+          )}
           <button
             disabled={!inStock}
             onClick={(e) => {

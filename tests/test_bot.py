@@ -76,7 +76,7 @@ async def test_start_replies_with_menu(bot_env):
 @pytest.mark.parametrize(
     "data,needle",
     [
-        ("catalog", "Чили"),
+        ("catalog", "Бангладеш"),
         ("premium", "7777"),
         ("profile", "Telegram ID"),
         ("orders", "нет покупок"),
@@ -94,17 +94,17 @@ async def test_menu_buttons_work(bot_env, data, needle):
 
 async def test_buy_without_balance_shows_alert(bot_env):
     bot, session, dp = bot_env
-    await dp.feed_update(bot, _cb("buy:p:1:balance"))
+    await dp.feed_update(bot, _cb("buy:p:2:balance"))
     alerts = [m for m in session.requests if isinstance(m, AnswerCallbackQuery) and m.show_alert]
     assert alerts and "Недостаточно средств" in alerts[0].text
 
 
 async def test_buy_with_stars_creates_order(bot_env):
     bot, session, dp = bot_env
-    await dp.feed_update(bot, _cb("buy:p:1:stars"))
+    await dp.feed_update(bot, _cb("buy:p:2:stars"))
     edits = [m for m in session.requests if isinstance(m, EditMessageText)]
     assert edits and "Заказ #1" in edits[-1].text
-    assert any("Оплатить 71 Stars" in t for t in _buttons(edits[-1]))
+    assert any("Оплатить 375 Stars" in t for t in _buttons(edits[-1]))  # UA: own Stars price
     await dp.feed_update(bot, _cb("orders", uid=11))
     edits = [m for m in session.requests if isinstance(m, EditMessageText)]
     assert "#1" in edits[-1].text

@@ -4,10 +4,11 @@ import { CheckCircle2, Clock3, Gem, Minus, PartyPopper, Plus, ShieldCheck, Ticke
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, newIdempotencyKey } from '../lib/api'
-import { money } from '../lib/format'
+import { money, stars, usd } from '../lib/format'
 import { useConfig, useMe } from '../lib/queries'
 import { haptic, openInvoice } from '../lib/telegram'
 import type { Order, PayMethod, Payment, PremiumNumber, Product, PromoPreview } from '../lib/types'
+import { GuaranteeCard } from './Guarantee'
 import { ManualPayment } from './ManualPayment'
 import { PayMethods } from './PayMethods'
 import { Sheet } from './Sheet'
@@ -224,13 +225,24 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
               <TicketPercent className="h-4 w-4" /> Есть промокод?
             </button>
           ))}
+          {item.kind === 'product' && (item.product.price_usd || (item.product.price_stars && item.product.stars_enabled)) && !promo && (
+            <div className="flex items-center justify-between rounded-2xl bg-white/[0.03] px-3.5 py-2.5 text-[12.5px] text-muted">
+              <span>Цена в других валютах</span>
+              <span className="font-semibold text-ink/80">
+                {item.product.price_usd ? usd(item.product.price_usd * qty) : ''}
+                {item.product.price_usd && item.product.price_stars && item.product.stars_enabled ? ' · ' : ''}
+                {item.product.stars_enabled && item.product.price_stars ? stars(item.product.price_stars * qty) : ''}
+              </span>
+            </div>
+          )}
+          {item.kind === 'product' && <GuaranteeCard category={item.product.category} compact />}
           <div className="flex items-end justify-between px-1">
             <span className="text-sm text-muted">Итого к оплате</span>
             <span className="font-display text-[28px] font-bold text-gradient">{money(total)}</span>
           </div>
           <div className="flex items-start gap-2.5 rounded-2xl bg-white/[0.03] p-3 text-[12.5px] text-muted">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-            Товар резервируется за вами на 30 минут после создания заказа. Цена фиксируется сервером.
+            Товар резервируется за вами на 30 минут. Цена фиксируется сервером; сумма списывается только выбранным способом оплаты. Цена в долларах — справочная.
           </div>
           <Button className="w-full" loading={busy} onClick={createOrder} disabled={maxQty < 1}>
             Создать заказ · {money(total)}
@@ -250,6 +262,8 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
             total={order.total}
             balance={me?.balance}
             uahPerStar={uahPerStar}
+            starsTotal={order.stars_total}
+            exclude={item.kind === 'product' && !item.product.stars_enabled ? ['stars'] : []}
             loading={paying}
             onPick={pay}
           />

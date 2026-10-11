@@ -14,6 +14,8 @@ CATEGORIES = {
     "payment": "Проблема с оплатой",
     "refund": "Возврат средств",
     "question": "Вопрос по заказу",
+    "country_request": "Заказ страны вне каталога",
+    "guarantee": "Гарантия: пропал доступ",
     "general": "Другое",
 }
 PRIORITIES = ("low", "normal", "high", "urgent")
@@ -25,6 +27,8 @@ DEFAULT_TEXT = {
     "payment": "Возникла проблема с оплатой заказа.",
     "refund": "Прошу рассмотреть возврат по заказу.",
     "question": "У меня вопрос по заказу.",
+    "country_request": "Хочу заказать номер страны, которой нет в каталоге.",
+    "guarantee": "Пропал доступ в течение гарантийного срока — прошу замену или возврат.",
     "general": "Нужна помощь с заказом.",
 }
 
@@ -37,7 +41,7 @@ def priority_for(order: Order | None, category: str) -> str:
     paid_not_delivered = order.status in (OrderStatus.paid, OrderStatus.processing)
     if category in ("not_received", "payment") and paid_not_delivered:
         return "high"
-    if category == "refund" or order.fulfillment_status == "failed":
+    if category in ("refund", "guarantee") or order.fulfillment_status == "failed":
         return "high"
     return "normal"
 

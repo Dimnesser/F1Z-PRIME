@@ -562,6 +562,12 @@ async def update_product(product_id: int, body: ProductPatch, admin: P("products
             raise HTTPException(403, "Недостаточно прав: Изменять цены")
         session.add(PriceHistory(product_id=product.id, field="sale_price", old_value=product.sale_price,
                                  new_value=changes["sale_price"], actor=str(admin)))
+    for field in ("price_usd", "price_stars"):
+        if field in changes and changes[field] != getattr(product, field):
+            if not admin.can("products.price"):
+                raise HTTPException(403, "Недостаточно прав: Изменять цены")
+            session.add(PriceHistory(product_id=product.id, field=field, old_value=getattr(product, field),
+                                     new_value=changes[field], actor=str(admin)))
     _check_sale(
         changes.get("price", product.price), changes.get("sale_price", product.sale_price),
         changes.get("available_from", product.available_from), changes.get("available_until", product.available_until),
@@ -602,7 +608,7 @@ def _num(v: Decimal | None) -> float | None:
 
 
 NULLABLE_PRODUCT_FIELDS = {"country_id", "sale_price", "sale_ends_at", "available_from", "available_until",
-                           "max_per_order", "max_per_user"}
+                           "max_per_order", "max_per_user", "price_usd", "price_stars"}
 
 
 def _check_sale(price, sale_price, available_from, available_until) -> None:  # noqa: ANN001
@@ -630,7 +636,8 @@ async def copy_product(product_id: int, admin: P("products.edit"), session: Sess
         raise HTTPException(404, "Товар не найден")
     fields = ("description", "category", "country_id", "price", "is_popular", "sort_order", "delivery_note",
               "fulfillment_mode", "uses_inventory", "sale_price", "sale_ends_at", "tags", "attributes",
-              "available_from", "available_until", "max_per_order", "max_per_user")
+              "available_from", "available_until", "max_per_order", "max_per_user", "price_usd", "price_stars",
+              "stars_enabled")
     copy = Product(title=f"{src.title} (копия)"[:128], stock=0, status=ProductStatus.hidden,
                    **{f: getattr(src, f) for f in fields})
     session.add(copy)

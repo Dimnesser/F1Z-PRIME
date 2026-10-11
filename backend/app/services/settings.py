@@ -12,7 +12,7 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
     "shop_name": ("F1Z PRIME", "Название магазина", True),
     "banner_title": ("Премиальные цифровые товары", "Заголовок баннера на главной", True),
     "banner_subtitle": (
-        "Номера 8 стран, красивые номера и мгновенная выдача после оплаты",
+        "Номера 13 стран, красивые номера и аккаунты — выдача после подтверждения оплаты",
         "Подзаголовок баннера",
         True,
     ),
@@ -63,6 +63,18 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
     "catalog_sort": ("manual", "Сортировка каталога: manual, price_asc, price_desc, popular, new", True),
     "promo_banner_text": ("", "Текст промо-баннера на главной (пусто — скрыт)", True),
     "promo_banner_url": ("", "Ссылка промо-баннера (https://...)", True),
+    # --- guarantee block (Mini App: product, country and checkout screens)
+    "guarantee_enabled": ("true", "Показывать блок гарантии", True),
+    "guarantee_days": ("14", "Срок гарантии, дней", True),
+    "guarantee_title": ("Гарантия 14 дней", "Заголовок блока гарантии", True),
+    "guarantee_text": (
+        "Если в течение 14 дней пропал доступ — заменим товар или вернём 80% стоимости. "
+        "Решение принимается после проверки обращения в поддержку.",
+        "Условия гарантии",
+        True,
+    ),
+    "guarantee_categories": ("numbers,accounts", "Категории с гарантией (через запятую)", True),
+    "country_requests_enabled": ("true", "Разрешить заказ страны, которой нет в каталоге (через поддержку)", True),
     "refund_policy": ("Возврат возможен, если товар не был выдан. Обратитесь в поддержку.", "Правила возвратов", True),
     # --- orders (private)
     "min_order_total": ("0", "Минимальная сумма заказа, грн (0 — без ограничения)", False),
@@ -81,7 +93,9 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
 
 GROUP: dict[str, str] = {
     **{k: "store" for k in ("shop_name", "shop_description", "shop_logo_url", "currency", "language", "support_contact",
-                            "support_url", "channel_url", "rules_url", "refund_policy")},
+                            "support_url", "channel_url", "rules_url", "refund_policy", "guarantee_enabled",
+                            "guarantee_days", "guarantee_title", "guarantee_text", "guarantee_categories",
+                            "country_requests_enabled")},
     **{k: "showcase" for k in ("banner_title", "banner_subtitle", "banner_image_url", "promo_banner_text",
                                "promo_banner_url", "show_out_of_stock", "catalog_sort")},
     **{k: "payments" for k in ("uah_per_star", "stars_enabled", "manual_enabled", "manual_payment_details", "min_topup",
@@ -103,11 +117,11 @@ CHOICES = {"catalog_sort": {"manual", "price_asc", "price_desc", "popular", "new
 BOOL_KEYS = {
     "stars_enabled", "manual_enabled", "maintenance_mode", "notify_orders", "notify_payments", "notify_tickets",
     "auto_complete_digital", "low_stock_alerts", "notification_retry", "expire_reservations", "auto_backup",
-    "error_monitoring", "show_out_of_stock", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
+    "error_monitoring", "show_out_of_stock", "guarantee_enabled", "country_requests_enabled", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
 }
 POSITIVE_NUMBER_KEYS = {"uah_per_star", "min_topup", "max_topup"}
 NON_NEGATIVE_NUMBER_KEYS = {"min_order_total", "max_order_total", "big_order_threshold"}
-INT_KEYS = {"low_stock_threshold", "max_items_per_user_day", "backup_interval_hours"}
+INT_KEYS = {"guarantee_days", "low_stock_threshold", "max_items_per_user_day", "backup_interval_hours"}
 URL_KEYS = {"support_url", "channel_url", "rules_url", "banner_image_url", "shop_logo_url", "promo_banner_url"}
 
 

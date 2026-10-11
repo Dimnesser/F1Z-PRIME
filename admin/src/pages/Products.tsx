@@ -336,8 +336,13 @@ function PriceCell({ p, onSave }: { p: Product; onSave?: (v: string | number) =>
       </span>
     )
   }
-  if (onSave) return <InlineNumber value={p.price} suffix="грн" onSave={onSave} />
-  return <span className="tabular px-2 font-bold">{money(p.price)}</span>
+  const other = [p.price_usd ? `$${p.price_usd.toFixed(2)}` : '', p.price_stars ? `${p.price_stars}⭐${p.stars_enabled ? '' : ' (выкл)'}` : ''].filter(Boolean).join(' · ')
+  return (
+    <span className="inline-flex flex-col items-end leading-tight">
+      {onSave ? <InlineNumber value={p.price} suffix="грн" onSave={onSave} /> : <span className="tabular px-2 font-bold">{money(p.price)}</span>}
+      {other && <span className="tabular px-2 text-[11px] text-muted">{other}</span>}
+    </span>
+  )
 }
 
 function KeysButton({ p, onClick }: { p: Product; onClick: () => void }) {

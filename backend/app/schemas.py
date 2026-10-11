@@ -31,6 +31,9 @@ class CountryOut(ORM):
 class CountryCatalogOut(CountryOut):
     product_id: int | None = None
     price: Money | None = None
+    price_usd: Money | None = None
+    price_stars: int | None = None
+    stars_enabled: bool = True
     stock: int = 0
 
 
@@ -48,6 +51,11 @@ class ProductOut(ORM):
     tags: list[str] = []
     attributes: dict[str, str] = {}
     max_per_order: int | None = None
+    price_usd: Money | None = None
+    price_stars: int | None = None
+    stars_enabled: bool = True
+    fulfillment_mode: str = "manual"
+    instant: bool = False
 
 
 class PremiumNumberOut(ORM):
@@ -117,6 +125,8 @@ class OrderOut(ORM):
     stage: str = ""
     discount: Money = Decimal("0")
     promo_code: str | None = None
+    stars_total: int | None = None
+    usd_total: Money | None = None
 
 
 class OrderDetailOut(OrderOut):
@@ -266,6 +276,9 @@ class ProductIn(BaseModel):
     available_until: datetime | None = None
     max_per_order: int | None = Field(default=None, ge=1, le=10)
     max_per_user: int | None = Field(default=None, ge=1, le=10000)
+    price_usd: Decimal | None = Field(default=None, gt=0, le=100_000, decimal_places=2)
+    price_stars: int | None = Field(default=None, ge=1, le=1_000_000)
+    stars_enabled: bool = True
 
 
 class ProductPatch(BaseModel):
@@ -290,6 +303,9 @@ class ProductPatch(BaseModel):
     available_until: datetime | None = None
     max_per_order: int | None = Field(default=None, ge=1, le=10)
     max_per_user: int | None = Field(default=None, ge=1, le=10000)
+    price_usd: Decimal | None = Field(default=None, gt=0, le=100_000, decimal_places=2)
+    price_stars: int | None = Field(default=None, ge=1, le=1_000_000)
+    stars_enabled: bool | None = None
 
 
 class AdminProductOut(ProductOut):

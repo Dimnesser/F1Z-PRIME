@@ -16,9 +16,11 @@ async def test_seeded_countries_with_prices(client):
     r = await client.get("/api/countries")
     assert r.status_code == 200
     data = {c["code"]: c for c in r.json()}
-    assert len(data) == 8
-    assert data["CL"]["price"] == 60 and data["UA"]["price"] == 225 and data["US"]["dial_code"] == "+1"
-    assert data["ID"]["flag"] == "🇮🇩" and data["BR"]["stock"] > 0
+    # catalog 2026-10: exactly 13 countries; old ones (CL, VN, ID) hidden, not deleted
+    assert len(data) == 13 and "CL" not in data and "VN" not in data
+    assert data["UA"]["price"] == 140 and data["UA"]["price_usd"] == 3.6 and data["UA"]["price_stars"] == 375
+    assert data["US"]["dial_code"] == "+1" and data["CA"]["price"] == 65 and data["RU"]["price_stars"] == 400
+    assert data["GB"]["flag"] == "🇬🇧" and data["MR"]["dial_code"] == "+222" and data["BR"]["stock"] > 0
 
 
 async def test_product_card(client):
@@ -26,7 +28,7 @@ async def test_product_card(client):
     pid = countries[0]["product_id"]
     r = await client.get(f"/api/products/{pid}")
     assert r.status_code == 200
-    assert r.json()["country"]["code"] == "CL"
+    assert r.json()["country"]["code"] == "US" and r.json()["price_stars"] == 150 and r.json()["price_usd"] == 2
     assert (await client.get("/api/products/99999")).status_code == 404
 
 
@@ -102,7 +104,7 @@ async def test_admin_users_list(client, admin_headers, user_headers):
     assert r.json()["items"][0]["telegram_id"] == 5550001
 
 
-async def _product_id(client, code="CL") -> int:
+async def _product_id(client, code="BD") -> int:
     return next(c["product_id"] for c in (await client.get("/api/countries")).json() if c["code"] == code)
 
 
@@ -213,7 +215,7 @@ async def test_stars_payment_idempotent(client, user_headers):
     data = r.json()
     assert data["invoice_link"].startswith("https://t.me/$invoice_")
     stars = data["payment"]["stars_amount"]
-    assert stars == 89  # ceil(75 / 0.85)
+    assert stars == 150  # the product's own Stars price, not converted by the rate
     async with session_factory()() as s:
         from app.models import Payment
 

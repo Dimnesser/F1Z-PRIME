@@ -164,7 +164,7 @@ async def test_payment_limit_requires_second_person(client, admin_headers, user_
     assert r.status_code == 201, r.text
     await _account(client, admin_headers, "fin1", "fin_small")
     h = await _login(client, "fin1", "fin1-pass-123")
-    pid = (await client.get("/api/products")).json()[0]["id"]  # 60 UAH
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)  # 60 UAH
     order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "limit-0001"}, headers=user_headers)).json()
     pay = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "manual"}, headers=user_headers)).json()["payment"]
     await client.post(f"/api/payments/{pay['id']}/submit", json={"comment": "оплачено"}, headers=user_headers)

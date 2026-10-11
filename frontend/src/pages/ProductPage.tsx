@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ArrowLeft, BadgeCheck, Clock, MessageSquareText, Package, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, Clock, MessageSquareText, Package, ShieldCheck, UserCheck, Zap } from 'lucide-react'
+import { GuaranteeCard } from '../components/Guarantee'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, EmptyState, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
-import { money } from '../lib/format'
+import { money, stars, usd } from '../lib/format'
 import { useShop } from '../lib/shop'
 import { useBack } from '../lib/useBack'
 
@@ -40,6 +41,11 @@ export default function ProductPage() {
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Цена</div>
             <div className="mt-0.5 font-display text-xl font-bold text-gradient">{money(p.price)}</div>
             {p.old_price ? <div className="text-[12px] font-semibold text-muted"><s>{money(p.old_price)}</s> · акция</div> : null}
+            {(p.price_usd || (p.price_stars && p.stars_enabled)) && (
+              <div className="mt-0.5 text-[12px] font-semibold text-muted">
+                {usd(p.price_usd)}{p.price_usd && p.price_stars && p.stars_enabled ? ' · ' : ''}{p.stars_enabled ? stars(p.price_stars) : ''}
+              </div>
+            )}
           </div>
           <div className="rounded-2xl bg-bg/50 p-3.5 ring-1 ring-white/[0.06]">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">В наличии</div>
@@ -67,6 +73,11 @@ export default function ProductPage() {
         </div>
       )}
 
+      <div className={`flex items-center gap-2.5 rounded-2xl px-4 py-3 text-[13px] font-semibold ${p.instant ? 'bg-success/[0.08] text-success' : 'bg-white/[0.04] text-muted'}`}>
+        {p.instant ? <><Zap className="h-4 w-4" /> Мгновенная выдача после оплаты</> : <><UserCheck className="h-4 w-4" /> Выдача оператором после подтверждения оплаты</>}
+      </div>
+      <GuaranteeCard category={p.category} />
+
       {p.description && (
         <div className="card p-4">
           <div className="mb-1.5 text-[13px] font-bold text-muted">Описание</div>
@@ -77,8 +88,8 @@ export default function ProductPage() {
       <div className="card divide-y divide-white/[0.06]">
         {[
           { icon: Clock, t: 'Резерв 30 минут', d: 'Товар закрепляется за вами на время оплаты' },
-          { icon: ShieldCheck, t: 'Проверенная оплата', d: 'Telegram Stars, баланс или перевод с проверкой' },
-          { icon: BadgeCheck, t: 'Выдача в заказе', d: 'Данные появятся в разделе «Покупки» и в чате бота' },
+          { icon: ShieldCheck, t: 'Проверенная оплата', d: p.stars_enabled ? 'Telegram Stars, баланс или перевод с проверкой' : 'Баланс или перевод с проверкой (Stars для этого товара недоступны)' },
+          { icon: BadgeCheck, t: 'Выдача в заказе', d: 'Данные появятся в карточке заказа в разделе «Покупки»' },
           { icon: MessageSquareText, t: 'Поддержка', d: 'Поможем, если что-то пошло не так' },
         ].map(({ icon: Icon, t, d }) => (
           <div key={t} className="flex items-center gap-3 p-3.5">
@@ -91,10 +102,17 @@ export default function ProductPage() {
         ))}
       </div>
 
+      {!inStock && (
+        <button onClick={() => navigate('/support')} className="card flex w-full items-center justify-center gap-2 p-3.5 text-[14px] font-semibold text-primary-soft pressable">
+          <MessageSquareText className="h-4 w-4" /> Спросить о поступлении в поддержке
+        </button>
+      )}
+
       <div className="sticky z-30" style={{ bottom: 'calc(var(--safe-bottom) + 92px)' }}>
         <Button className="w-full" disabled={!inStock} onClick={() => checkout({ kind: 'product', product: p })}>
           {inStock ? `Купить за ${money(p.price)}` : 'Нет в наличии'}
         </Button>
+
       </div>
     </div>
   )

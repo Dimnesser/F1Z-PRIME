@@ -36,6 +36,10 @@ export const ORDER_STAGE: Record<OrderStage, { label: string; tone: Tone; hint: 
   refunded: { label: 'Возврат', tone: 'red', hint: 'По заказу выполнен возврат.' },
 }
 
+const usdFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
+export const usd = (v: number | null | undefined) => (v === null || v === undefined ? '' : usdFmt.format(v))
+export const stars = (v: number | null | undefined) => (v === null || v === undefined ? '' : `${v} ⭐`)
+
 export const PAYMENT_STATUS: Record<Payment['status'], string> = {
   pending: 'Ожидает оплаты',
   awaiting_confirmation: 'На проверке',

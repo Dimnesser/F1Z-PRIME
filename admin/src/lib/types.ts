@@ -22,6 +22,8 @@ export interface Product {
   tags: string[]; attributes: Record<string, string>
   available_from: string | null; available_until: string | null
   max_per_order: number | null; max_per_user: number | null
+  /** separate prices set by staff — never converted by a rate */
+  price_usd: number | null; price_stars: number | null; stars_enabled: boolean; instant?: boolean
 }
 export interface Premium {
   id: number; title: string; tier: string; display_mask: string; description: string; price: number

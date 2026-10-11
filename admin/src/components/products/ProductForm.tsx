@@ -19,12 +19,14 @@ export type Form = {
   fulfillment_mode: FulfillmentMode; uses_inventory: boolean; sale_price: string; sale_ends_at: string
   tags: string[]; attributes: { key: string; value: string }[]
   available_from: string; available_until: string; max_per_order: string; max_per_user: string
+  price_usd: string; price_stars: string; stars_enabled: boolean
 }
 
 export const EMPTY: Form = {
   title: '', description: '', category: 'numbers', country_id: null, price: '', stock: '0', stock_reason: '', status: 'active', is_popular: false,
   sort_order: '100', delivery_note: '', fulfillment_mode: 'manual', uses_inventory: false, sale_price: '', sale_ends_at: '', tags: [], attributes: [],
   available_from: '', available_until: '', max_per_order: '', max_per_user: '',
+  price_usd: '', price_stars: '', stars_enabled: true,
 }
 
 export const toForm = (p: Product): Form => ({
@@ -35,6 +37,8 @@ export const toForm = (p: Product): Form => ({
   tags: [...(p.tags ?? [])], attributes: Object.entries(p.attributes ?? {}).map(([key, value]) => ({ key, value: String(value) })),
   available_from: isoToLocal(p.available_from), available_until: isoToLocal(p.available_until),
   max_per_order: p.max_per_order ? String(p.max_per_order) : '', max_per_user: p.max_per_user ? String(p.max_per_user) : '',
+  price_usd: p.price_usd === null || p.price_usd === undefined ? '' : String(p.price_usd),
+  price_stars: p.price_stars ? String(p.price_stars) : '', stars_enabled: p.stars_enabled ?? true,
 })
 
 const intOrNull = (v: string) => (v.trim() === '' ? null : Number(v))
@@ -50,6 +54,8 @@ export function validate(f: Form, initial: Form | null): string | null {
     if (!(sale > 0)) return 'Акционная цена должна быть больше 0'
     if (sale >= price) return 'Акционная цена должна быть ниже обычной'
   }
+  if (f.price_usd.trim() && !(Number(decimal(f.price_usd)) > 0)) return 'Цена в USD должна быть больше 0'
+  if (f.price_stars.trim() && !(Number.isInteger(Number(f.price_stars)) && Number(f.price_stars) >= 1)) return 'Цена в Stars — целое число от 1'
   if (f.available_from && f.available_until && new Date(f.available_from) >= new Date(f.available_until)) return 'Окончание продаж должно быть позже начала'
   const mpo = intOrNull(f.max_per_order)
   if (mpo !== null && !(mpo >= 1 && mpo <= 10)) return 'Максимум в заказе — от 1 до 10'
@@ -74,6 +80,8 @@ export function buildBody(f: Form, initial: Form | null): Record<string, unknown
     tags: f.tags, attributes: attrsObj(f.attributes),
     available_from: localToIso(f.available_from), available_until: localToIso(f.available_until),
     max_per_order: intOrNull(f.max_per_order), max_per_user: intOrNull(f.max_per_user),
+    price_usd: f.price_usd.trim() ? decimal(f.price_usd) : null, price_stars: intOrNull(f.price_stars),
+    stars_enabled: f.stars_enabled,
   }
   if (!initial?.id) return { ...all, stock: f.uses_inventory ? 0 : Number(f.stock) || 0 }
   const before = buildBody({ ...initial, id: undefined }, null)
@@ -113,6 +121,17 @@ export function ProductFields({ form, setForm, initial, categories, countries, c
       <Field label="Акция действует до" hint="Пусто — пока не уберёте вручную" className="sm:col-span-2">
         <DateInput value={form.sale_ends_at} disabled={!can.price || !form.sale_price.trim()} onChange={(v) => set('sale_ends_at', v)} />
       </Field>
+      <Field label="Цена, USD" hint="Справочная: показывается покупателю, оплаты в долларах нет">
+        <input className="input tabular" inputMode="decimal" disabled={!can.price} value={form.price_usd} placeholder="—" onChange={(e) => set('price_usd', e.target.value)} />
+      </Field>
+      <Field label="Цена, Telegram Stars" hint="Ровно столько Stars выставляется в счёте. Пусто — по курсу из настроек оплаты">
+        <input className="input tabular" inputMode="numeric" disabled={!can.price} value={form.price_stars} placeholder="—" onChange={(e) => set('price_stars', e.target.value.replace(/\D/g, ''))} />
+      </Field>
+      <label className="flex items-start gap-3 rounded-xl bg-white/[0.03] px-4 py-3 sm:col-span-2">
+        <input type="checkbox" className="mt-1 h-4 w-4 accent-[#8B5CF6]" disabled={!can.price} checked={form.stars_enabled} onChange={(e) => set('stars_enabled', e.target.checked)} />
+        <span className="text-sm"><span className="font-semibold">Разрешить оплату Telegram Stars для этого товара</span>
+          <span className="mt-0.5 block text-xs text-muted">Выключайте для товаров, которые нельзя продавать за Stars по правилам Telegram.</span></span>
+      </label>
 
       <Section title="Выдача" />
       <div className="sm:col-span-2">

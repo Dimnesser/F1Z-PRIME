@@ -136,6 +136,8 @@ class Product(TimestampMixin, Base):
         CheckConstraint("price > 0", name="ck_products_price_positive"),
         CheckConstraint("stock >= 0", name="ck_products_stock_non_negative"),
         CheckConstraint("sale_price IS NULL OR sale_price > 0", name="ck_products_sale_price_positive"),
+        CheckConstraint("price_usd IS NULL OR price_usd > 0", name="ck_products_price_usd_positive"),
+        CheckConstraint("price_stars IS NULL OR price_stars > 0", name="ck_products_price_stars_positive"),
         Index("ix_products_status_category", "status", "category"),
     )
 
@@ -167,6 +169,11 @@ class Product(TimestampMixin, Base):
     available_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     max_per_order: Mapped[int | None] = mapped_column(Integer)
     max_per_user: Mapped[int | None] = mapped_column(Integer)  # lifetime, paid + pending orders
+    # prices per payment currency, set by staff (never converted by an exchange rate):
+    # price (UAH) — balance / card transfer; price_stars — Telegram Stars invoice; price_usd — shown for reference
+    price_usd: Mapped[Decimal | None] = mapped_column(Money)
+    price_stars: Mapped[int | None] = mapped_column(Integer)
+    stars_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
 
     country: Mapped[Country | None] = relationship(back_populates="products", lazy="joined")
 
@@ -175,6 +182,12 @@ class Product(TimestampMixin, Base):
 
     def effective_price(self, now: datetime) -> Decimal:
         return self.sale_price if self.sale_active(now) else self.price  # type: ignore[return-value]
+
+    @property
+    def instant(self) -> bool:
+        """Delivered automatically right after payment: only with a confirmed stock (uploaded units or a counter
+        staff set) and the automatic mode. Manual products are never advertised as instant."""
+        return self.fulfillment_mode == "auto" and self.stock > 0 and (self.uses_inventory or bool(self.delivery_note.strip()))
 
     @property
     def price_now(self) -> Decimal:
@@ -251,6 +264,9 @@ class Order(TimestampMixin, Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     discount: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0", nullable=False)
     promo_code: Mapped[str | None] = mapped_column(String(32))
+    # Stars amount fixed when the order is created (product price_stars × qty, minus the promo share)
+    stars_total: Mapped[int | None] = mapped_column(Integer)
+    usd_total: Mapped[Decimal | None] = mapped_column(Money)
 
     user: Mapped[User] = relationship(back_populates="orders", lazy="joined")
     product: Mapped[Product | None] = relationship(lazy="joined")

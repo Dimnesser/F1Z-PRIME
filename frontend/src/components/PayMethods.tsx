@@ -12,10 +12,12 @@ const META: Record<PayMethod, { title: string; icon: typeof Wallet; tint: string
 }
 
 export function PayMethods({
-  methods, total, balance, uahPerStar, loading, onPick, exclude = [],
+  methods, total, balance, uahPerStar, loading, onPick, exclude = [], starsTotal = null,
 }: {
   methods: PayMethod[]
   total: number
+  /** the order's own Stars price (set by the shop); null → older items billed by the rate */
+  starsTotal?: number | null
   balance?: number
   uahPerStar: number
   loading: PayMethod | null
@@ -31,8 +33,9 @@ export function PayMethods({
         const notEnough = m === 'balance' && (balance ?? 0) < total
         let hint = ''
         if (m === 'balance') hint = `Доступно ${money(balance ?? 0)}`
-        if (m === 'stars') hint = `≈ ${Math.max(1, Math.ceil(total / uahPerStar))} ⭐ · мгновенно`
-        if (m === 'manual') hint = 'Подтверждение администратором'
+        if (m === 'stars') hint = starsTotal ? `К оплате ${starsTotal} ⭐ · счёт в Telegram` : `≈ ${Math.max(1, Math.ceil(total / uahPerStar))} ⭐ · счёт в Telegram`
+        if (m === 'balance' && !notEnough) hint = `Спишется ${money(total)} · доступно ${money(balance ?? 0)}`
+        if (m === 'manual') hint = `К переводу ${money(total)} · подтверждает администратор`
         if (m === 'test') hint = 'Только DEV_MODE — деньги не списываются'
         return (
           <motion.button

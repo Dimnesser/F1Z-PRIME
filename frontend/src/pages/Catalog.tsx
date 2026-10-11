@@ -5,9 +5,11 @@ import { Search, SearchX } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CountryCard, ProductMini } from '../components/Cards'
+import { CountryRequestButton } from '../components/CountryRequest'
+import { GuaranteeCard } from '../components/Guarantee'
 import { EmptyState, PageTitle, SectionHeader, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
-import { useCountries } from '../lib/queries'
+import { useCategories, useCountries } from '../lib/queries'
 import { useShop } from '../lib/shop'
 import { haptic } from '../lib/telegram'
 
@@ -34,7 +36,12 @@ export default function Catalog() {
     return l
   }, [countries, q, sort])
 
+  const { data: categories } = useCategories()
   const others = (digital ?? []).filter((p) => p.category !== 'numbers')
+  // one section per category (e.g. «Рандом аккаунты 2015–2019», digital goods), titles from the shop settings
+  const groups = [...new Set(others.map((p) => p.category))].map((slug) => ({
+    slug, title: categories?.find((c) => c.slug === slug)?.title ?? slug, items: others.filter((p) => p.category === slug),
+  }))
 
   const buy = async (productId: number) => {
     try {
@@ -47,7 +54,7 @@ export default function Catalog() {
 
   return (
     <div>
-      <PageTitle title="Каталог" subtitle="Номера по странам с актуальными ценами и остатками" />
+      <PageTitle title="Страны номеров" subtitle="Цены в гривнах, долларах и Telegram Stars. Выдача после подтверждения оплаты." />
       <div className="relative mb-3">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted" />
         <input className="input pl-11" placeholder="Страна или код, например +48" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -83,15 +90,17 @@ export default function Catalog() {
           ))}
         </motion.div>
       )}
+      {!isLoading && <CountryRequestButton />}
+      <div className="mt-3"><GuaranteeCard category="numbers" /></div>
 
-      {others.length > 0 && (
-        <section className="mt-7">
-          <SectionHeader title="✨ Цифровые товары" />
+      {groups.map((g) => (
+        <section key={g.slug} className="mt-7">
+          <SectionHeader title={g.title} />
           <motion.div className="stagger -mx-4 flex gap-3 overflow-x-auto px-4 no-scrollbar">
-            {others.map((p) => <ProductMini key={p.id} p={p} onOpen={() => navigate(`/product/${p.id}`)} />)}
+            {g.items.map((p) => <ProductMini key={p.id} p={p} onOpen={() => navigate(`/product/${p.id}`)} />)}
           </motion.div>
         </section>
-      )}
+      ))}
     </div>
   )
 }

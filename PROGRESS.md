@@ -130,3 +130,14 @@ implement the remaining stages listed above (see task list in this file).
   once without failures; /system/status version=21fecb1, api/db/worker/bot ok; 21 admin endpoints 200 for the
   owner; stranger exchange 403, admin API without auth 401; Mini App 200 (TLS valid), new public endpoints OK;
   no errors in api/worker logs; bot token not in logs; memory: worker 59/160 MiB, api 97/256, bot 130/192.
+
+## Stage F — Country catalog 2026-10 (13 countries, UAH / USD / Stars)
+- Migration 0007: products.price_usd, price_stars, stars_enabled; orders.stars_total, usd_total (additive).
+- `services/catalog_update.py`: applied once at API start (setting `catalog_version`), no duplicates
+  (countries by ISO code, number product by country), old prices replaced with price history,
+  CL/VN/ID hidden (not deleted), unconfirmed seeded stock of numbers reset to 0 (production only),
+  category «Рандом аккаунты 2015–2019» (75 грн / 150 ⭐, manual, Stars payment off by default — Telegram rules).
+- Stars invoice = product's own Stars price (× qty, promo share), never converted by the rate; USD is reference only.
+- Guarantee block (settings guarantee_*), «Нет нужной страны?» → support ticket (category country_request).
+- «Мгновенная выдача» only for auto mode + confirmed stock; manual products show «Выдача оператором».
+- Tests 126 passed (9 new in tests/test_catalog_2026.py); mobile check 390px: 13 countries, no overflow.

@@ -147,10 +147,13 @@ async def _country_catalog(session: SessionDep) -> list[CountryCatalogOut]:
         out.append(
             CountryCatalogOut(
                 **CountryCatalogOut.model_validate(c, from_attributes=True).model_dump(
-                    exclude={"product_id", "price", "stock"}
+                    exclude={"product_id", "price", "stock", "price_usd", "price_stars", "stars_enabled"}
                 ),
                 product_id=main.id if main else None,
                 price=main.effective_price(now) if main else None,
+                price_usd=main.price_usd if main else None,
+                price_stars=main.price_stars if main else None,
+                stars_enabled=main.stars_enabled if main else True,
                 stock=sum(p.stock for p in items),
             )
         )
@@ -461,6 +464,28 @@ async def support_categories() -> list[dict]:
     return [
         {"key": k, "label": v, "text": support_service.DEFAULT_TEXT[k]} for k, v in support_service.CATEGORIES.items()
     ]
+
+
+class CountryRequest(BaseModel):
+    country: str = Field(min_length=2, max_length=60)
+    quantity: int = Field(default=1, ge=1, le=100)
+    comment: str = Field(default="", max_length=1000)
+
+
+@router.post("/support/country-request", response_model=TicketDetailOut, status_code=201)
+async def country_request(body: CountryRequest, user: UserDep, session: SessionDep) -> SupportTicket:
+    """A country that isn't in the catalog: a support ticket for the operator (no payment is taken here)."""
+    if not await settings_service.get_bool(session, "country_requests_enabled"):
+        raise HTTPException(403, "Заказ стран вне каталога сейчас недоступен")
+    country = " ".join(body.country.split())
+    text = f"Хочу заказать номер страны: {country}\nКоличество: {body.quantity}"
+    if body.comment.strip():
+        text += f"\nКомментарий: {body.comment.strip()}"
+    ticket = await support_service.create_ticket(
+        session, user, f"Запрос страны: {country}"[:160], text, category="country_request"
+    )
+    await session.commit()
+    return await _load_ticket(session, ticket.id, user.id)
 
 
 @router.post("/orders/{order_id}/support", response_model=TicketDetailOut, status_code=201)

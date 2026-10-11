@@ -61,8 +61,11 @@ async def _ensure_method_enabled(session: AsyncSession, method: PaymentMethod) -
             raise ServiceError("Ручная оплата отключена", 400, "method_disabled")
 
 
-async def _stars_invoice(session: AsyncSession, payment: Payment, title: str, description: str) -> str:
-    payment.stars_amount = await stars_for(session, payment.amount)
+async def _stars_invoice(
+    session: AsyncSession, payment: Payment, title: str, description: str, stars: int | None = None
+) -> str:
+    # an order with its own Stars price is billed exactly that; otherwise (top-ups, older products) the rate is used
+    payment.stars_amount = stars if stars else await stars_for(session, payment.amount)
     await session.flush()
     try:
         return await telegram.create_stars_invoice_link(title, description, payment.payload, payment.stars_amount)
@@ -129,6 +132,8 @@ async def start_order_payment(session: AsyncSession, user: User, order_id: int, 
         await session.flush()
         return PaymentStart(payment)
 
+    if method == PaymentMethod.stars and order.product is not None and not order.product.stars_enabled:
+        raise ServiceError("Для этого товара оплата Telegram Stars недоступна", 400, "stars_not_allowed")
     # stars / manual: reuse an open payment of the same method for this order
     existing = await session.scalar(
         select(Payment).where(
@@ -149,7 +154,9 @@ async def start_order_payment(session: AsyncSession, user: User, order_id: int, 
         session.add(payment)
         await session.flush()
     if method == PaymentMethod.stars:
-        link = await _stars_invoice(session, payment, f"Заказ #{order.id}", order.item_title)
+        link = await _stars_invoice(
+            session, payment, f"Заказ {order.public_id or order.id}", order.item_title, stars=order.stars_total
+        )
         return PaymentStart(payment, invoice_link=link)
     return PaymentStart(payment, instructions=await settings_service.get_value(session, "manual_payment_details"))
 

@@ -18,7 +18,7 @@ def tma(uid: int) -> dict[str, str]:
 
 
 async def _pid(client) -> int:
-    return (await client.get("/api/products")).json()[0]["id"]  # 60 UAH, plenty of stock
+    return next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)  # 60 UAH, plenty of stock
 
 
 async def test_promo_percent_applied_on_server(client, admin_headers, user_headers):

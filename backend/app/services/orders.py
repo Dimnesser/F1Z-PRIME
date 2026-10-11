@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import math
+from decimal import Decimal
+
 import logging
 from datetime import timedelta
 
@@ -238,9 +241,22 @@ async def create_order(
             await inventory.reserve_units(session, product, order, quantity)
         inventory.record(session, product, -quantity, "reserved", order_id=order.id, note=f"резерв заказа {order.public_id}")
         add_event(session, order, OrderStatus.pending, "system", OrderStatus.pending, note="Товар зарезервирован")
+    if product_id is not None:
+        _fix_currency_totals(order, product)
     await rules.fire(session, "order_created", order.id)
     log.info("order %s created by user %s total=%s", order.id, user.telegram_id, order.total)
     return order, True
+
+
+def _fix_currency_totals(order: Order, product: Product) -> None:
+    """Stars / USD amounts come from the product's own prices (set by staff), never from an exchange rate.
+    A promo discount reduces them in the same proportion as the UAH total."""
+    subtotal = money(order.unit_price) * order.quantity
+    share = (money(order.total) / subtotal) if subtotal > 0 else Decimal(1)
+    if product.price_stars:
+        order.stars_total = max(1, math.ceil(Decimal(product.price_stars * order.quantity) * share))
+    if product.price_usd:
+        order.usd_total = money(Decimal(product.price_usd) * order.quantity * share)
 
 
 async def _release_items(session: AsyncSession, order: Order, reason: str = "released") -> None:

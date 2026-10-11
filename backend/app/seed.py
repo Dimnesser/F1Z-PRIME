@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.db import dispose_engine, session_factory
 from app.models import Category, Country, PremiumNumber, Product, ProductStatus
-from app.services import rbac
+from app.services import catalog_update, rbac
 from app.services import settings as settings_service
 from app.services.masks import auto_mask
 
@@ -86,7 +86,7 @@ async def seed(demo: bool = False) -> dict[str, int]:
                         category="numbers",
                         country_id=country.id,
                         price=Decimal(price),
-                        stock=stock,
+                        stock=stock if demo else 0,  # real stock is set by staff; demo data only in demo mode
                         status=ProductStatus.active,
                         is_popular=code in POPULAR,
                         sort_order=(i + 1) * 10,
@@ -94,6 +94,10 @@ async def seed(demo: bool = False) -> dict[str, int]:
                     )
                 )
                 created["products"] += 1
+        await session.flush()
+        report = await catalog_update.apply(session, reset_unconfirmed_stock=not demo, demo_stock=30 if demo else 0)
+        if report:
+            created["catalog_update"] = report  # type: ignore[assignment]
         if demo:
             for code, number, mask, tier, price in DEMO_PREMIUM:
                 normalized = "+" + "".join(ch for ch in number if ch.isdigit())

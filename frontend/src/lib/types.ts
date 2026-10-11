@@ -11,6 +11,10 @@ export interface Country {
 export interface CountryCatalog extends Country {
   product_id: number | null
   price: number | null
+  /** prices are set separately by the shop (not converted by a rate) */
+  price_usd: number | null
+  price_stars: number | null
+  stars_enabled: boolean
   stock: number
 }
 
@@ -28,6 +32,12 @@ export interface Product {
   tags: string[]
   attributes: Record<string, string>
   max_per_order: number | null
+  price_usd: number | null
+  price_stars: number | null
+  stars_enabled: boolean
+  fulfillment_mode: 'auto' | 'manual' | 'review'
+  /** delivered automatically right after payment (confirmed stock + auto mode) */
+  instant: boolean
 }
 
 export interface PremiumNumber {
@@ -89,6 +99,8 @@ export interface Order {
   stage: OrderStage
   discount: number
   promo_code: string | null
+  stars_total: number | null
+  usd_total: number | null
 }
 
 export type OrderStage =
