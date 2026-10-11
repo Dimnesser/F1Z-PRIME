@@ -372,12 +372,15 @@ async def admin_actions(
     entity: str | None = Query(None, max_length=32),
     who: str | None = Query(None, max_length=64),
     page: int = Query(1, ge=1),
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> list[dict]:
     stmt = select(AdminAction)
     if entity:
         stmt = stmt.where(AdminAction.entity == entity)
     if who:
         stmt = stmt.where(AdminAction.admin == who)
+    stmt = date_range(stmt, AdminAction.created_at, date_from, date_to)
     rows = (await session.scalars(stmt.order_by(AdminAction.id.desc()).offset((page - 1) * limit).limit(limit))).all()
     return [
         {"id": r.id, "admin": r.admin, "action": r.action, "entity": r.entity, "entity_id": r.entity_id,

@@ -249,7 +249,7 @@ class AccountPatch(BaseModel):
     version: int | None = Field(default=None, ge=1)
 
 
-async def _account_out(session: SessionDep, a: AdminUser, stats: dict[str, dict] | None = None) -> dict:
+async def _account_out(session: SessionDep, a: AdminUser, stats: dict[str, dict] | None = None, viewer_id: int | None = None) -> dict:
     perms, limits, role = await rbac.effective(session, a)
     st = (stats or {}).get(a.username, {})
     return {
@@ -263,6 +263,7 @@ async def _account_out(session: SessionDep, a: AdminUser, stats: dict[str, dict]
         "last_login_at": a.last_login_at.isoformat() if a.last_login_at else None,
         "created_at": a.created_at.isoformat(), "note": a.note, "version": a.version,
         "orders_processed": st.get("orders", 0), "tickets_closed": st.get("tickets", 0),
+        "is_self": viewer_id is not None and viewer_id == a.id,
     }
 
 
@@ -308,7 +309,7 @@ async def _check_grant(admin, session: SessionDep, role_slug: str, extra: list[s
 async def list_accounts(admin: P("staff.manage"), session: SessionDep) -> list[dict]:
     stats = await _staff_stats(session)
     rows = (await session.scalars(select(AdminUser).order_by(AdminUser.id))).all()
-    return [await _account_out(session, a, stats) for a in rows]
+    return [await _account_out(session, a, stats, admin.account_id) for a in rows]
 
 
 @router.post("/accounts", status_code=201)

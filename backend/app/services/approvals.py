@@ -29,7 +29,7 @@ async def create(
     await session.flush()
     await inbox.notify_permission(
         session, "refunds.approve", "approval", f"Нужно одобрение: {KINDS.get(kind, kind)} на {money(amount)} грн",
-        f"{summary}\nЗапросил: {actor}", link="/settings?tab=approvals",
+        f"{summary}\nЗапросил: {actor}", link="/team?tab=approvals",
     )
     return req
 
