@@ -141,3 +141,7 @@ implement the remaining stages listed above (see task list in this file).
 - Guarantee block (settings guarantee_*), «Нет нужной страны?» → support ticket (category country_request).
 - «Мгновенная выдача» only for auto mode + confirmed stock; manual products show «Выдача оператором».
 - Tests 126 passed (9 new in tests/test_catalog_2026.py); mobile check 390px: 13 countries, no overflow.
+- Deploy 9c7ff2f started 2026-10-11 06:59 UTC (user script 415675): backups `/root/f1z-backup/db-20261011-065911.sql.gz`
+  (32 tables) and `code-20261011-065911.tgz`; `.env` unchanged; before: orders=3, paid sum 85.00.
+  Build + checks run in background; result file `/root/f1z/verify-v4-result.txt` (ends with DONE).
+  Next step: read that file once and report.
