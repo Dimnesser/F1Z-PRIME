@@ -70,7 +70,7 @@ export function buildBody(f: Form, initial: Form | null): Record<string, unknown
     title: f.title.trim(), description: f.description, category: f.category, country_id: f.country_id, price: decimal(f.price),
     status: f.status, is_popular: f.is_popular, sort_order: Number(f.sort_order) || 0, delivery_note: f.delivery_note,
     fulfillment_mode: f.fulfillment_mode, uses_inventory: f.uses_inventory,
-    sale_price: f.sale_price.trim() ? decimal(f.sale_price) : null, sale_ends_at: localToIso(f.sale_ends_at),
+    sale_price: f.sale_price.trim() ? decimal(f.sale_price) : null, sale_ends_at: f.sale_price.trim() ? localToIso(f.sale_ends_at) : null,
     tags: f.tags, attributes: attrsObj(f.attributes),
     available_from: localToIso(f.available_from), available_until: localToIso(f.available_until),
     max_per_order: intOrNull(f.max_per_order), max_per_user: intOrNull(f.max_per_user),
@@ -154,7 +154,7 @@ export function ProductFields({ form, setForm, initial, categories, countries, c
           </Field>
           {stockChanged ? (
             <Field label="Причина изменения остатка" hint={`Было ${initial?.stock} → станет ${form.stock || 0}. Попадёт в историю остатков.`}>
-              <input className="input" maxLength={200} autoFocus value={form.stock_reason} placeholder="Поступление, пересчёт…" onChange={(e) => set('stock_reason', e.target.value)} />
+              <input className="input" maxLength={200} value={form.stock_reason} placeholder="Поступление, пересчёт…" onChange={(e) => set('stock_reason', e.target.value)} />
             </Field>
           ) : <div className="hidden sm:block" />}
         </>
@@ -250,7 +250,7 @@ function TagsInput({ tags, onChange }: { tags: string[]; onChange: (t: string[])
             if (e.key === 'Backspace' && !draft && tags.length) onChange(tags.slice(0, -1))
           }} />
       </div>
-      <span className="mt-1.5 block text-xs text-muted">До {MAX_TAGS} тегов, каждый до {MAX_TAG_LEN} символов. Используются для поиска и фильтров.</span>
+      <span className="mt-1.5 block text-xs text-muted">До {MAX_TAGS} тегов, каждый до {MAX_TAG_LEN} символов. Показываются покупателю в карточке товара.</span>
     </div>
   )
 }

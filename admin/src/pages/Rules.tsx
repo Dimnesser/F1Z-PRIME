@@ -301,14 +301,17 @@ function Builder({ form, setForm, catalog, onClose, onSaved, onConflict, onDelet
   const runDry = async () => {
     const local = localCheck()
     if (local) { setDry((d) => ({ ...d, error: local, result: null })); return }
-    const entity = Number(dry.entity)
+    // accepts an internal id or a public order number like F1Z-000123 (public_id = F1Z- + zero-padded id)
+    const entity = Number(dry.entity.trim().toUpperCase().replace(/^F1Z-/, ''))
     setDry((d) => ({ ...d, busy: true, error: null, result: null }))
     try {
       const result = await api<DryRun>('/rules/dry-run', {
         method: 'POST',
         body: {
           trigger: form.trigger, match: form.match, conditions: form.conditions.map(condPayload),
-          actions: form.actions.filter((a) => a.type).map(actionPayload), entity_id: entity > 0 ? entity : null,
+          // actions with unfilled required fields are skipped here (only their description is shown)
+          actions: form.actions.filter((a) => a.type && (catalog.actions.find((x) => x.key === a.type)?.params ?? [])
+            .every((p) => !p.required || (a.params[p.name] ?? '').trim())).map(actionPayload), entity_id: entity > 0 ? entity : null,
         },
       })
       setDry((d) => ({ ...d, busy: false, result }))
@@ -496,9 +499,9 @@ function Builder({ form, setForm, catalog, onClose, onSaved, onConflict, onDelet
           <div className="flex items-center gap-2 font-display text-[15px] font-semibold"><FlaskConical className="h-4 w-4 text-secondary" /> Проверить (dry-run)</div>
           <p className="mt-1 text-xs text-muted">Текущие (несохранённые) условия проверяются на реальном {form.trigger === 'ticket_created' ? 'обращении' : 'заказе'}. Ничего не выполняется и не отправляется.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <input className="input tabular w-full sm:w-56" inputMode="numeric" value={dry.entity}
+            <input className="input tabular w-full sm:w-56" value={dry.entity}
               placeholder={form.trigger === 'ticket_created' ? 'ID обращения (необязательно)' : 'ID заказа (необязательно)'}
-              onChange={(e) => setDry({ ...dry, entity: e.target.value.replace(/\D/g, '') })}
+              onChange={(e) => setDry({ ...dry, entity: e.target.value.replace(/[^0-9A-Za-z-]/g, '').slice(0, 12) })}
               onKeyDown={(e) => { if (e.key === 'Enter') void runDry() }} />
             <Btn variant="secondary" className="w-full sm:w-auto" loading={dry.busy} onClick={runDry}><FlaskConical className="h-4 w-4" /> Проверить</Btn>
           </div>

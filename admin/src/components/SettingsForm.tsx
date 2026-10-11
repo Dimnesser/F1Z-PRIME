@@ -5,7 +5,13 @@ import { api, errMsg } from '../lib/api'
 import type { SettingRow } from '../lib/types'
 import { Btn, Card, Field, Skeleton, Toggle, useConfirm, useToast } from './ui'
 
-export interface SettingField { key: string; label: string; hint?: ReactNode; multiline?: boolean; placeholder?: string; danger?: boolean; suffix?: string }
+export interface SettingField {
+  key: string; label: string; hint?: ReactNode; multiline?: boolean; placeholder?: string; danger?: boolean; suffix?: string
+  /** render a <select>; required for keys of type 'choice' */
+  options?: { value: string; label: string }[]
+}
+/** /settings rows carry extra server metadata (group, type incl. 'time'/'choice', editable, restart_required) */
+type Row = Omit<SettingRow, 'type'> & { type: string; group?: string; editable?: boolean; restart_required?: boolean }
 
 /** Shared settings editor: loads /settings, edits only the given keys, saves the changed ones in one PUT. */
 export function useSettings() {
@@ -30,7 +36,12 @@ export function SettingsSection({ title, description, fields, rows, onSaved, rea
   const toast = useToast()
   const confirm = useConfirm()
   useEffect(() => { setValues(initial) }, [initial])
-  const types = Object.fromEntries((rows ?? []).map((r) => [r.key, r.type]))
+  const meta = Object.fromEntries(((rows ?? []) as Row[]).map((r) => [r.key, r])) as Record<string, Row | undefined>
+  const types = Object.fromEntries(Object.values(meta).map((r) => [r!.key, r!.type])) as Record<string, string>
+  const locked = (key: string) => Boolean(readOnly || meta[key]?.editable === false)
+  const hintFor = (f: SettingField) => (meta[f.key]?.restart_required
+    ? <>{f.hint}{f.hint ? ' · ' : ''}<span className="font-semibold text-warning">нужен перезапуск сервера</span></>
+    : f.hint)
   const changed = fields.filter((f) => (values[f.key] ?? '') !== (initial[f.key] ?? ''))
 
   const save = async (patch?: Record<string, string>) => {
@@ -63,9 +74,9 @@ export function SettingsSection({ title, description, fields, rows, onSaved, rea
             <div key={f.key} className="flex items-center justify-between gap-4 px-4 py-3.5">
               <div className="min-w-0">
                 <div className="text-sm font-semibold">{f.label}</div>
-                {f.hint && <div className="mt-0.5 text-xs text-muted">{f.hint}</div>}
+                {hintFor(f) && <div className="mt-0.5 text-xs text-muted">{hintFor(f)}</div>}
               </div>
-              <Toggle label={f.label} disabled={readOnly || busy} checked={values[f.key] === 'true'}
+              <Toggle label={f.label} disabled={locked(f.key) || busy} checked={values[f.key] === 'true'}
                 onChange={(v) => { setValues((s) => ({ ...s, [f.key]: String(v) })); void save({ [f.key]: String(v) }) }} />
             </div>
           ))}
@@ -74,16 +85,24 @@ export function SettingsSection({ title, description, fields, rows, onSaved, rea
       {textFields.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
           {textFields.map((f) => (
-            <Field key={f.key} label={f.label + (f.suffix ? `, ${f.suffix}` : '')} hint={f.hint} className={clsx(f.multiline && 'sm:col-span-2')}>
-              {f.multiline
-                ? <textarea className="input min-h-[90px]" disabled={readOnly} value={values[f.key] ?? ''} placeholder={f.placeholder} onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))} />
-                : <input className="input" disabled={readOnly} inputMode={types[f.key] === 'number' ? 'decimal' : undefined} value={values[f.key] ?? ''} placeholder={f.placeholder}
-                    onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))} />}
+            <Field key={f.key} label={f.label + (f.suffix ? `, ${f.suffix}` : '')} hint={hintFor(f)} className={clsx(f.multiline && 'sm:col-span-2')}>
+              {f.options
+                ? (
+                  <select className="input" disabled={locked(f.key)} value={values[f.key] ?? ''} onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))}>
+                    {!f.options.some((o) => o.value === (values[f.key] ?? '')) && <option value={values[f.key] ?? ''}>{values[f.key] || '—'}</option>}
+                    {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )
+                : f.multiline
+                  ? <textarea className="input min-h-[90px]" disabled={locked(f.key)} value={values[f.key] ?? ''} placeholder={f.placeholder} onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))} />
+                  : <input className="input" disabled={locked(f.key)} type={types[f.key] === 'time' ? 'time' : 'text'}
+                      inputMode={types[f.key] === 'number' ? 'decimal' : undefined} value={values[f.key] ?? ''} placeholder={f.placeholder}
+                      onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))} />}
             </Field>
           ))}
         </div>
       )}
-      {!readOnly && textFields.length > 0 && (
+      {textFields.some((f) => !locked(f.key)) && (
         <div className="mt-4 flex items-center justify-end gap-2">
           {changed.length > 0 && <Btn variant="ghost" onClick={() => setValues(initial)}>Отменить</Btn>}
           <Btn loading={busy} disabled={!changed.length} onClick={() => save()}><Save className="h-4 w-4" /> Сохранить</Btn>
