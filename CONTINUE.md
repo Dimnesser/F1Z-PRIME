@@ -44,10 +44,12 @@ worker с durable-очередью (retry/backoff/dead-letter/recover_stale), в
 - **ЭТАП 15 (документация)**: обновить `README.md`, `DEPLOYMENT.md`, `ADMIN_GUIDE.md`, `TEST_REPORT.md`.
 
 ## Следующее конкретное действие
-1. `python -m pytest -q` — убедиться, что 150 passed.
-2. Коммит и пуш текущих изменений (аудит + тесты + бот) в `ccr-27c43927-xio4pi`.
-3. Затем оценить ЭТАП 5 (графики/статистика в админке) по `admin_reports.py` и Dashboard — добавить
-   недостающее, не дублируя.
+Крупные инварианты и функции закрыты (см. `PROJECT_AUDIT.md`, `TEST_REPORT.md`). Остаётся опционально:
+1. ЭТАП 3 — косметическая полировка Mini App (оценить реальные пробелы, не переписывать работающее).
+2. M1 из аудита — троттлинг `POST /api/orders` (низкий приоритет).
+3. Дописать `README.md` / `DEPLOYMENT.md` / `ADMIN_GUIDE.md` (ЭТАП 15, частично: уже есть
+   `PROJECT_AUDIT.md`, `TEST_REPORT.md`, `DEVELOPMENT_PROGRESS.md`, `CONTINUE.md`).
+Перед работой: `python -m pytest -q` (ожидается 150 passed). Деплой — по подтверждению владельца.
 
 ## Правила деплоя
 Новый production-деплой — ТОЛЬКО по явному подтверждению владельца. Скрипт готов (см. выше). Реальные
