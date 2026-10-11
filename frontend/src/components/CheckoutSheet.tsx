@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { CheckCircle2, Clock3, Gem, Minus, PartyPopper, Plus, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Clock3, Gem, Minus, PartyPopper, Plus, ShieldCheck, TicketPercent, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, newIdempotencyKey } from '../lib/api'
 import { money } from '../lib/format'
 import { useConfig, useMe } from '../lib/queries'
 import { haptic, openInvoice } from '../lib/telegram'
-import type { Order, PayMethod, Payment, PremiumNumber, Product } from '../lib/types'
+import type { Order, PayMethod, Payment, PremiumNumber, Product, PromoPreview } from '../lib/types'
 import { ManualPayment } from './ManualPayment'
 import { PayMethods } from './PayMethods'
 import { Sheet } from './Sheet'
@@ -35,6 +35,11 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
   const [paying, setPaying] = useState<PayMethod | null>(null)
   const [manual, setManual] = useState<{ payment: Payment; instructions: string } | null>(null)
   const key = useRef(newIdempotencyKey())
+  const [promoOpen, setPromoOpen] = useState(false)
+  const [promoCode, setPromoCode] = useState('')
+  const [promo, setPromo] = useState<PromoPreview | null>(null)
+  const [promoBusy, setPromoBusy] = useState(false)
+  const [promoError, setPromoError] = useState('')
 
   useEffect(() => {
     if (open) {
@@ -42,6 +47,10 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
       setQty(1)
       setOrder(item?.kind === 'order' ? item.order : null)
       setManual(null)
+      setPromo(null)
+      setPromoCode('')
+      setPromoError('')
+      setPromoOpen(false)
       key.current = newIdempotencyKey()
     }
   }, [open, item])
@@ -51,8 +60,26 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
   const title = item.kind === 'product' ? item.product.title : item.kind === 'premium' ? item.number.display_mask : item.order.item_title
   const flag = item.kind === 'product' ? item.product.country?.flag : item.kind === 'premium' ? item.number.country?.flag : undefined
   const price = item.kind === 'product' ? item.product.price : item.kind === 'premium' ? item.number.price : item.order.unit_price
-  const maxQty = item.kind === 'product' ? Math.min(10, item.product.stock) : 1
-  const total = order?.total ?? price * qty
+  const maxQty = item.kind === 'product' ? Math.min(10, item.product.stock, item.product.max_per_order ?? 10) : 1
+  // preview only — the server recalculates price and discount when the order is created
+  const total = order?.total ?? (promo ? promo.total : price * qty)
+  const oldPrice = item.kind === 'product' ? item.product.old_price : null
+
+  const applyPromo = async () => {
+    if (item.kind !== 'product' || !promoCode.trim()) return
+    setPromoBusy(true)
+    setPromoError('')
+    try {
+      setPromo(await api.checkPromo(promoCode.trim(), item.product.id, qty))
+      haptic.success()
+    } catch (e) {
+      setPromo(null)
+      setPromoError((e as Error).message)
+      haptic.error()
+    } finally {
+      setPromoBusy(false)
+    }
+  }
   const uahPerStar = Number(config?.settings.uah_per_star ?? '0.85') || 0.85
 
   const refresh = () => {
@@ -70,6 +97,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
         premium_number_id: item.kind === 'premium' ? item.number.id : undefined,
         quantity: qty,
         idempotency_key: key.current,
+        promo_code: promo?.code,
       })
       setOrder(o)
       setStep('pay')
@@ -151,12 +179,12 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
         <div className="min-w-0 flex-1">
           <div className={item.kind === 'premium' ? 'font-mono text-[16px] font-bold' : 'text-[15px] font-bold'}>{title}</div>
           <div className="text-[12.5px] text-muted">
-            {item.kind === 'product' && `${item.product.country?.dial_code ?? ''} · ${money(price)} / шт`}
+            {item.kind === 'product' && <>{item.product.country?.dial_code ?? ''} · {money(price)} / шт{oldPrice ? <s className="ml-1.5 opacity-60">{money(oldPrice)}</s> : null}</>}
             {item.kind === 'premium' && 'Красивый номер · 1 шт'}
             {item.kind === 'order' && `${item.order.quantity} шт · ${money(price)} / шт`}
           </div>
         </div>
-        {order && <Badge tone="amber">#{order.id}</Badge>}
+        {order && <Badge tone="amber">{order.public_id ?? `#${order.id}`}</Badge>}
       </div>
 
       {step === 'confirm' && (
@@ -165,16 +193,37 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
             <div className="flex items-center justify-between rounded-2xl bg-card p-3.5 ring-1 ring-white/[0.06]">
               <span className="text-sm font-semibold text-muted">Количество</span>
               <div className="flex items-center gap-3">
-                <button className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.07] pressable disabled:opacity-40" disabled={qty <= 1} onClick={() => { setQty(qty - 1); haptic.select() }}>
+                <button className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.07] pressable disabled:opacity-40" disabled={qty <= 1} onClick={() => { setQty(qty - 1); setPromo(null); haptic.select() }}>
                   <Minus className="h-4 w-4" />
                 </button>
                 <span className="w-6 text-center font-display text-lg font-bold">{qty}</span>
-                <button className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.07] pressable disabled:opacity-40" disabled={qty >= maxQty} onClick={() => { setQty(qty + 1); haptic.select() }}>
+                <button className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.07] pressable disabled:opacity-40" disabled={qty >= maxQty} onClick={() => { setQty(qty + 1); setPromo(null); haptic.select() }}>
                   <Plus className="h-4 w-4" />
                 </button>
               </div>
             </div>
           )}
+          {item.kind === 'product' && (promo ? (
+            <div className="flex items-center justify-between rounded-2xl bg-success/[0.08] p-3.5 ring-1 ring-success/25">
+              <div className="flex items-center gap-2 text-sm font-semibold text-success">
+                <TicketPercent className="h-4 w-4" /> {promo.code}: −{money(promo.discount)}
+              </div>
+              <button aria-label="Убрать промокод" className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.06] pressable" onClick={() => setPromo(null)}><X className="h-4 w-4" /></button>
+            </div>
+          ) : promoOpen ? (
+            <div className="space-y-1.5">
+              <div className="flex gap-2">
+                <input value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())} maxLength={32} autoCapitalize="characters"
+                  placeholder="Промокод" className="h-11 min-w-0 flex-1 rounded-xl bg-card px-3.5 font-mono text-[15px] uppercase outline-none ring-1 ring-white/[0.08] focus:ring-primary/60" />
+                <Button size="md" loading={promoBusy} disabled={!promoCode.trim()} onClick={applyPromo}>Применить</Button>
+              </div>
+              {promoError && <p className="px-1 text-[12.5px] text-danger">{promoError}</p>}
+            </div>
+          ) : (
+            <button className="flex items-center gap-2 px-1 text-[13.5px] font-semibold text-primary-soft pressable" onClick={() => setPromoOpen(true)}>
+              <TicketPercent className="h-4 w-4" /> Есть промокод?
+            </button>
+          ))}
           <div className="flex items-end justify-between px-1">
             <span className="text-sm text-muted">Итого к оплате</span>
             <span className="font-display text-[28px] font-bold text-gradient">{money(total)}</span>
@@ -230,7 +279,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
           </div>
           <div>
             <div className="flex items-center justify-center gap-2 font-display text-xl font-bold">Оплата прошла <PartyPopper className="h-5 w-5 text-warning" /></div>
-            <p className="mt-1 text-sm text-muted">Заказ #{order.id} · {order.status === 'completed' ? 'выполнен' : 'оплачен, ожидает выдачи'}</p>
+            <p className="mt-1 text-sm text-muted">Заказ {order.public_id ?? `#${order.id}`} · {order.status === 'completed' ? 'выполнен — данные в карточке заказа' : 'оплачен, ожидает выдачи'}</p>
           </div>
           {order.payment_method === 'test' && <Badge tone="amber">ТЕСТОВЫЙ ПЛАТЁЖ · DEV_MODE</Badge>}
           {order.delivery_data && (

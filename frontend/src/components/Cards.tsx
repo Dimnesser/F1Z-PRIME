@@ -102,7 +102,10 @@ export function ProductMini({ p, onOpen }: { p: Product; onOpen: () => void }) {
       <div className="mt-3 line-clamp-1 text-[14px] font-bold">{p.country?.name ?? p.title}</div>
       <div className="text-[11.5px] text-muted">{p.country?.dial_code ?? p.category}</div>
       <div className="mt-3 flex items-center justify-between">
-        <span className="font-display text-[15px] font-bold">{money(p.price)}</span>
+        <span className="font-display text-[15px] font-bold">
+          {money(p.price)}
+          {p.old_price ? <s className="ml-1 text-[11px] font-semibold text-muted">{money(p.old_price)}</s> : null}
+        </span>
         <span className={clsx('text-[11px] font-bold', p.stock > 0 ? 'text-success' : 'text-danger')}>{p.stock > 0 ? `${p.stock} шт` : 'нет'}</span>
       </div>
     </motion.button>

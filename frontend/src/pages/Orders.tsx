@@ -4,8 +4,8 @@ import { ChevronRight, Package } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { StatusBadge } from '../components/StatusBadge'
-import { Button, EmptyState, PageTitle, Skeleton } from '../components/ui'
-import { date, money } from '../lib/format'
+import { Badge, Button, EmptyState, PageTitle, Skeleton } from '../components/ui'
+import { date, money, ORDER_STAGE } from '../lib/format'
 import { useOrders } from '../lib/queries'
 import { haptic } from '../lib/telegram'
 
@@ -53,12 +53,12 @@ export default function Orders() {
               className="card flex w-full items-center gap-3.5 p-4 text-left"
             >
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-brand-soft font-display text-[13px] font-bold text-primary-soft ring-1 ring-white/10">
-                #{o.id}
+                {o.public_id ?? `#${o.id}`}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-bold">{o.item_title}</div>
                 <div className="mt-0.5 text-[12px] text-muted">{date(o.created_at)} · {o.quantity} шт</div>
-                <div className="mt-2"><StatusBadge status={o.status} /></div>
+                <div className="mt-2">{o.stage ? <Badge tone={ORDER_STAGE[o.stage].tone}>{ORDER_STAGE[o.stage].label}</Badge> : <StatusBadge status={o.status} />}</div>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <span className="font-display text-[16px] font-bold">{money(o.total)}</span>

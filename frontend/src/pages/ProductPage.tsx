@@ -39,6 +39,7 @@ export default function ProductPage() {
           <div className="rounded-2xl bg-bg/50 p-3.5 ring-1 ring-white/[0.06]">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Цена</div>
             <div className="mt-0.5 font-display text-xl font-bold text-gradient">{money(p.price)}</div>
+            {p.old_price ? <div className="text-[12px] font-semibold text-muted"><s>{money(p.old_price)}</s> · акция</div> : null}
           </div>
           <div className="rounded-2xl bg-bg/50 p-3.5 ring-1 ring-white/[0.06]">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">В наличии</div>
@@ -46,6 +47,25 @@ export default function ProductPage() {
           </div>
         </div>
       </motion.div>
+
+      {(p.tags.length > 0 || Object.keys(p.attributes).length > 0) && (
+        <div className="card p-4">
+          {p.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {p.tags.map((t) => <span key={t} className="rounded-full bg-primary/15 px-2.5 py-1 text-[12px] font-semibold text-primary-soft">#{t}</span>)}
+            </div>
+          )}
+          {Object.keys(p.attributes).length > 0 && (
+            <div className={p.tags.length ? 'mt-3 divide-y divide-white/[0.06]' : 'divide-y divide-white/[0.06]'}>
+              {Object.entries(p.attributes).map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between gap-3 py-2 text-[13.5px]">
+                  <span className="text-muted">{k}</span><span className="text-right font-semibold">{v}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {p.description && (
         <div className="card p-4">
