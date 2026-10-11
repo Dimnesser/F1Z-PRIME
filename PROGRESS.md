@@ -145,3 +145,14 @@ implement the remaining stages listed above (see task list in this file).
   (32 tables) and `code-20261011-065911.tgz`; `.env` unchanged; before: orders=3, paid sum 85.00.
   Build + checks run in background; result file `/root/f1z/verify-v4-result.txt` (ends with DONE).
   Next step: read that file once and report.
+
+## Stage G — Legacy panel migration helpers (tools/)
+- Added read-only, privacy-preserving helpers under `tools/` (not part of the Docker runtime):
+  `legacy_panel_audit.py` (aggregate region/price/sold only; opens accounts.db read-only/immutable),
+  `legacy_catalog_preview.py` (CSV of HIDDEN draft products, stock 0, for admin → Products → Import),
+  `legacy_reconcile.py` (compares legacy aggregates with a product export; marks REVIEW_EXISTING/NEW; no DB writes),
+  `LEGACY_INTEGRATION.md` (migration + security boundaries).
+- Helpers never read phone numbers, Telegram sessions/auth codes, or buyer data; tests assert nothing leaks.
+- Tests: `tests/test_legacy_catalog_preview.py` (in the pytest suite) + `tools/tests/test_legacy_reconcile.py`; full suite 127 passed.
+- NOT integrated: the uploaded legacy `bot.py`, `accounts.db`, `.session` files and receipts — those contain real
+  Telegram account credentials and personal data and are deliberately excluded from the repo and the server.
