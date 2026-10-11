@@ -234,6 +234,10 @@ async def product_detail(product_id: int, session: SessionDep) -> Product:
     return product
 
 
+PROMO_CHECKS_PER_MIN = 15  # guards against guessing codes
+_promo_checks: dict[int, deque[float]] = defaultdict(deque)
+
+
 class PromoCheck(BaseModel):
     code: str = Field(min_length=1, max_length=32)
     product_id: int = Field(gt=0)
@@ -243,6 +247,13 @@ class PromoCheck(BaseModel):
 @router.post("/promo/check")
 async def promo_check(body: PromoCheck, user: UserDep, session: SessionDep) -> dict:
     """Preview of a promo code discount. The order applies it again on the server, under a lock."""
+    hits = _promo_checks[user.id]
+    now = time.monotonic()
+    while hits and now - hits[0] > 60:
+        hits.popleft()
+    if len(hits) >= PROMO_CHECKS_PER_MIN:
+        raise HTTPException(429, "Слишком много попыток. Попробуйте через минуту.")
+    hits.append(now)
     product = await session.get(Product, body.product_id)
     if product is None or product.status != ProductStatus.active:
         raise HTTPException(404, "Товар не найден")

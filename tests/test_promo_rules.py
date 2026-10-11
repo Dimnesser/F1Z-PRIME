@@ -218,3 +218,14 @@ async def test_rule_dry_run_and_hold_for_review(client, admin_headers, user_head
     # a version conflict is refused
     r = await client.patch(f"/api/admin/rules/{rule['id']}", json={**hold, "version": 1}, headers=admin_headers)
     assert r.status_code == 409
+
+
+async def test_promo_check_rate_limited(client, user_headers):
+    from app.api import public
+
+    public._promo_checks.clear()
+    pid = await _pid(client)
+    codes = [(await client.post("/api/promo/check", json={"code": f"GUESS{i:03d}", "product_id": pid}, headers=user_headers)).status_code
+             for i in range(17)]
+    assert codes[:15] == [404] * 15 and codes[-1] == 429
+    public._promo_checks.clear()
