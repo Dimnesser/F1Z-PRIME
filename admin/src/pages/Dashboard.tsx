@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import {
-  AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Boxes, Clock, CreditCard, Eye, EyeOff, Headphones, PackagePlus, Percent, ShoppingCart,
+  AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Boxes, Clock, CreditCard, Eye, EyeOff, Headphones, PackagePlus, Percent, Phone, ShoppingCart,
   SlidersHorizontal, TicketPercent, TrendingUp, UserPlus, Users, Wallet,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -17,7 +17,7 @@ interface Dash {
   finance_hidden?: boolean
   days: number; users: number; new_users_today: number; orders: number; paid_orders: number; orders_today: number
   revenue: number | null; revenue_today: number | null; revenue_period: number | null; stock: number; premium_available: number
-  pending_orders: number; pending_payments: number; failed_payments: number; open_tickets: number; low_stock_threshold: number
+  pending_orders: number; pending_payments: number; failed_payments: number; failed_fulfillments: number; phones_available: number; open_tickets: number; low_stock_threshold: number
   sales: SeriesPoint[]; new_users: SeriesPoint[]
   categories: { slug: string; title: string; revenue: number; orders: number }[]
   low_stock: { id: number; title: string; stock: number; flag: string | null; price: number }[]
@@ -98,6 +98,8 @@ export default function Dashboard() {
             <Stat icon={Users} label="Пользователи" value={num(d.users)} sub={`+${d.new_users_today} сегодня`} tone="violet" to={can('users.view') ? '/users' : undefined} />
             <Stat icon={Boxes} label="Товаров в наличии" value={num(d.stock)} sub={`+ ${d.premium_available} красивых номеров`} tone="cyan" to={can('products.view') ? '/products' : undefined} />
             <Stat icon={Clock} label="Ожидают оплаты" value={num(d.pending_orders)} sub={d.pending_payments ? `${d.pending_payments} платежей на проверке` : 'нет платежей на проверке'} tone="amber" to={can('orders.view') ? '/orders?status=pending' : undefined} />
+            <Stat icon={Phone} label="Номеров в наличии" value={num(d.phones_available)} sub={d.phones_available === 0 ? 'склад пуст' : 'готовы к продаже'} tone={d.phones_available === 0 ? 'red' : 'green'} to={can('products.view') ? '/phones' : undefined} />
+            <Stat icon={AlertTriangle} label="Ошибки выдачи" value={num(d.failed_fulfillments)} sub={d.failed_fulfillments ? 'нужен оператор' : 'нет ошибок'} tone={d.failed_fulfillments ? 'red' : 'green'} to={can('orders.view') ? '/orders?status=paid' : undefined} />
             <Stat icon={AlertTriangle} label="Неудачные платежи" value={num(d.failed_payments)} sub="отклонённые" tone="red" to={finance ? '/finance' : undefined} />
             <Stat icon={Headphones} label="Открытые обращения" value={num(d.open_tickets)} sub="ждут ответа" tone="amber" to={can('support.view') ? '/support' : undefined} />
           </>)}

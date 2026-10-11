@@ -19,6 +19,7 @@ from app.models import (
     Payment,
     PaymentKind,
     PaymentStatus,
+    PhoneInventory,
     PremiumNumber,
     PremiumStatus,
     Product,
@@ -81,6 +82,14 @@ async def dashboard(admin: P("analytics.view"), session: SessionDep, days: int =
     )
     failed_payments = await session.scalar(
         select(func.count(Payment.id)).where(Payment.status == PaymentStatus.rejected)
+    )
+    # paid orders whose automatic delivery failed and need an operator — a key health signal
+    failed_fulfillments = await session.scalar(
+        select(func.count(Order.id)).where(Order.fulfillment_status == "failed")
+    )
+    # phone-number warehouse: numbers ready to sell right now (derived from real rows)
+    phones_available = await session.scalar(
+        select(func.count(PhoneInventory.id)).where(PhoneInventory.status == "AVAILABLE")
     )
     open_tickets = await session.scalar(
         select(func.count(SupportTicket.id)).where(SupportTicket.status == TicketStatus.open)
@@ -149,6 +158,8 @@ async def dashboard(admin: P("analytics.view"), session: SessionDep, days: int =
         "pending_orders": pending_orders or 0,
         "pending_payments": pending_payments or 0,
         "failed_payments": failed_payments or 0,
+        "failed_fulfillments": failed_fulfillments or 0,
+        "phones_available": phones_available or 0,
         "open_tickets": open_tickets or 0,
         "low_stock_threshold": threshold,
         "sales": sales,

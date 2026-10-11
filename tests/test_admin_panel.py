@@ -66,6 +66,12 @@ async def test_dashboard_analytics(client, admin_headers, user_headers):
     assert d["categories"][0]["slug"] == "numbers"
     assert len(d["recent_orders"]) == 1
     assert {"pending_orders", "failed_payments", "open_tickets", "low_stock"} <= d.keys()
+    # warehouse + delivery-health signals on the dashboard
+    assert {"phones_available", "failed_fulfillments"} <= d.keys()
+    assert d["phones_available"] == 0 and d["failed_fulfillments"] == 0
+    await client.post("/api/admin/phones/bulk", json={"text": "+380671234811\n+380671234812"}, headers=admin_headers)
+    d2 = (await client.get("/api/admin/dashboard?days=7", headers=admin_headers)).json()
+    assert d2["phones_available"] == 2
 
 
 async def test_users_filters_detail_export(client, admin_headers, user_headers):
