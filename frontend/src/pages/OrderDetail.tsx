@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Check, Copy, Headphones, KeyRound, PackageCheck, Receipt } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Headphones, KeyRound, PackageCheck, Phone, Receipt } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StatusBadge } from '../components/StatusBadge'
@@ -102,7 +102,9 @@ export default function OrderDetail() {
 
       {o.delivered_items.length > 0 && (
         <div className="rounded-3xl border border-success/25 bg-success/[0.06] p-4">
-          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider text-success"><KeyRound className="h-4 w-4" /> Ключи и коды</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider text-success">
+            {o.delivered_kind === 'phone' ? <><Phone className="h-4 w-4" /> Ваши номера</> : <><KeyRound className="h-4 w-4" /> Ключи и коды</>}
+          </div>
           <div className="mt-2 space-y-2">
             {o.delivered_items.map((v, i) => (
               <button key={i} onClick={() => copy(v)} className="flex w-full items-center justify-between gap-3 rounded-2xl bg-black/20 px-3.5 py-3 text-left pressable">
@@ -111,7 +113,9 @@ export default function OrderDetail() {
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11.5px] text-muted">Не передавайте эти данные посторонним.</p>
+          <p className="mt-2 text-[11.5px] text-muted">
+            {o.delivered_kind === 'phone' ? 'Нажмите на номер, чтобы скопировать. Не передавайте его посторонним.' : 'Не передавайте эти данные посторонним.'}
+          </p>
         </div>
       )}
 

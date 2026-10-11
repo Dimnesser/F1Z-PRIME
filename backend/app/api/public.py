@@ -373,6 +373,11 @@ async def _order_detail(session: SessionDep, order: Order) -> OrderDetailOut:
             )
         ).all()
         data.delivered_items += [r.phone_e164 for r in phone_rows]
+        # label hint for the buyer: phone numbers vs encrypted keys/codes
+        if phone_rows and not units:
+            data.delivered_kind = "phone"
+        elif data.delivered_items:
+            data.delivered_kind = "secret"
     data.support_ticket_id = await session.scalar(
         select(SupportTicket.id)
         .where(SupportTicket.order_id == order.id, SupportTicket.status != TicketStatus.closed)

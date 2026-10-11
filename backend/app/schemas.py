@@ -132,8 +132,10 @@ class OrderOut(ORM):
 class OrderDetailOut(OrderOut):
     payments: list[PaymentOut] = []
     delivery_note: str | None = None
-    # decrypted inventory units (keys/vouchers) — only after the order is delivered
+    # decrypted inventory units (keys/vouchers) or sold phone numbers — only after the order is delivered
     delivered_items: list[str] = []
+    # what delivered_items are, so the buyer sees the right label: "phone" | "secret" | None
+    delivered_kind: str | None = None
     support_ticket_id: int | None = None
 
 

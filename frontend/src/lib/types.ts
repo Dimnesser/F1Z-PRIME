@@ -112,6 +112,7 @@ export interface OrderDetail extends Order {
   delivery_note: string | null
   /** keys / codes — only present once the order is delivered */
   delivered_items: string[]
+  delivered_kind: string | null
   support_ticket_id: number | null
 }
 

@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import {
-  ArrowLeft, Bell, Boxes, ChevronsLeft, Store, CreditCard, Gem, Globe2, Headphones, LayoutDashboard, LogOut, MoreHorizontal, Settings,
+  ArrowLeft, Bell, Boxes, ChevronsLeft, Store, CreditCard, Gem, Globe2, Headphones, LayoutDashboard, LogOut, MoreHorizontal, Phone, Settings,
   ServerCog, ShieldCheck, ShoppingCart, Sparkles, TicketPercent, Users, Workflow, X,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -16,6 +16,7 @@ export const NAV: { to: string; label: string; icon: typeof Users; perms?: strin
   { to: '/orders', label: 'Заказы', icon: ShoppingCart, perms: ['orders.view'] },
   { to: '/users', label: 'Пользователи', icon: Users, perms: ['users.view'] },
   { to: '/products', label: 'Товары', icon: Boxes, perms: ['products.view'] },
+  { to: '/phones', label: 'База номеров', icon: Phone, perms: ['products.view'] },
   { to: '/promo', label: 'Промокоды', icon: TicketPercent, perms: ['promo.manage'] },
   { to: '/premium', label: 'Красивые номера', icon: Gem, perms: ['products.edit'] },
   { to: '/countries', label: 'Страны', icon: Globe2, perms: ['products.edit'] },
