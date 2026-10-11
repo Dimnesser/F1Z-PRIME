@@ -15,8 +15,8 @@ from sqlalchemy import func, or_, select
 from app.api.admin import csv_response, date_range
 from app.api.deps import SessionDep
 from app.api.deps import perm as P
-from app.models import PhoneInventory, Product
-from app.services import phones
+from app.models import Order, Payment, PhoneInventory, PhoneVerification, Product, User
+from app.services import phones, verification
 from app.services.common import lock, log_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -204,3 +204,76 @@ async def delete_phone(phone_id: int, admin: P("products.stock"), session: Sessi
     log_admin(session, admin, "phone_delete", "phone", phone_id)
     await session.commit()
     return {"deleted": True}
+
+
+# ---------------------------------------------------------------- ownership verification (owner review)
+# Scaffold only: a MOCK provider generates fake codes for testing the review flow. No real Telegram codes
+# or sessions are ever read. The owner reviews and confirms issuance here.
+
+
+class DecisionIn(BaseModel):
+    approve: bool
+    note: str = Field(default="", max_length=200)
+
+
+async def _verification_detail(session: SessionDep, v: PhoneVerification) -> dict:
+    phone = await session.get(PhoneInventory, v.phone_id) if v.phone_id else None
+    order = await session.get(Order, v.order_id)
+    await session.flush()
+    await session.refresh(v)  # settle server-side onupdate columns before reading them synchronously
+    data = verification.out(v, phone)
+    if order is not None:
+        pay = await session.scalar(
+            select(Payment).where(Payment.order_id == order.id).order_by(Payment.id.desc()).limit(1)
+        )
+        buyer = await session.get(User, order.user_id)
+        data["order"] = {
+            "id": order.id, "public_id": order.public_id, "item_title": order.item_title,
+            "status": order.status.value, "country": phone.country_name if phone else None,
+            "payment_status": pay.status.value if pay else None,
+            "payment_method": order.payment_method, "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+            "requested_at": v.created_at.isoformat(),
+            "buyer": {"telegram_id": buyer.telegram_id, "username": buyer.username} if buyer else None,
+        }
+    return data
+
+
+@router.get("/verifications")
+async def list_verifications(
+    _: P("orders.fulfill"), session: SessionDep,
+    status: str = Query("active", pattern="^(active|WAITING|RECEIVED|APPROVED|EXPIRED|FAILED|all)$"),
+) -> list[dict]:
+    stmt = select(PhoneVerification)
+    if status == "active":
+        stmt = stmt.where(PhoneVerification.status.in_(["WAITING", "RECEIVED"]))
+    elif status != "all":
+        stmt = stmt.where(PhoneVerification.status == status)
+    rows = (await session.scalars(stmt.order_by(PhoneVerification.id.desc()).limit(200))).all()
+    return [await _verification_detail(session, v) for v in rows]
+
+
+@router.get("/verifications/{vid}")
+async def get_verification(vid: int, _: P("orders.fulfill"), session: SessionDep) -> dict:
+    v = await session.get(PhoneVerification, vid)
+    if v is None:
+        raise HTTPException(404, "Запрос проверки не найден")
+    return await _verification_detail(session, v)
+
+
+@router.post("/verifications/{vid}/fetch-code")
+async def fetch_verification_code(vid: int, admin: P("orders.fulfill"), session: SessionDep) -> dict:
+    """Mock provider only: pull a FICTITIOUS code (for UI testing). Never a real Telegram code."""
+    v = await verification.fetch_code(session, vid, actor=str(admin))
+    log_admin(session, admin, "phone_verify_fetch", "verification", vid, provider=v.provider)
+    detail = await _verification_detail(session, v)
+    await session.commit()
+    return detail
+
+
+@router.post("/verifications/{vid}/decide")
+async def decide_verification(vid: int, body: DecisionIn, admin: P("orders.fulfill"), session: SessionDep) -> dict:
+    v = await verification.decide(session, vid, body.approve, actor=str(admin), note=body.note)
+    log_admin(session, admin, "phone_verify_decide", "verification", vid, approve=body.approve, note=body.note)
+    detail = await _verification_detail(session, v)
+    await session.commit()
+    return detail

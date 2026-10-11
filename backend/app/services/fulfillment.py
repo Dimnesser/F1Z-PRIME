@@ -83,6 +83,16 @@ async def process(session, order_id: int) -> str:  # noqa: ANN001
     await incidents.resolve_for_order(session, order.id, ["fulfillment_failed", "stuck_order"], "auto")
     await notifications.notify_customer(session, order, "order_delivered")
     await rules.fire(session, "order_delivered", order.id)
+    if product.uses_phone_inventory and await settings_service.get_bool(session, "phone_verification_enabled"):
+        # optional, non-blocking: open an ownership-confirmation request for the owner to review (mock provider)
+        from app.services import verification
+
+        await verification.open_for_order(session, order)
+        await notifications.notify_staff(
+            session, "staff_phone_verification",
+            notifications.order_values(order, reason="Открыта заявка на подтверждение владения номером"),
+            dedupe=f"phv:{order.id}",
+        )
     return "delivered"
 
 

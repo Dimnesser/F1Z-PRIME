@@ -75,6 +75,7 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
     ),
     "guarantee_categories": ("numbers,accounts", "Категории с гарантией (через запятую)", True),
     "country_requests_enabled": ("true", "Разрешить заказ страны, которой нет в каталоге (через поддержку)", True),
+    "phone_verification_enabled": ("false", "Открывать заявку на подтверждение владения номером (мок-провайдер)", False),
     "refund_policy": ("Возврат возможен, если товар не был выдан. Обратитесь в поддержку.", "Правила возвратов", True),
     # --- orders (private)
     "min_order_total": ("0", "Минимальная сумма заказа, грн (0 — без ограничения)", False),
@@ -107,7 +108,7 @@ GROUP: dict[str, str] = {
                                     "daily_summary")},
     **{k: "automation" for k in ("auto_complete_digital", "low_stock_alerts", "low_stock_threshold",
                                  "notification_retry", "expire_reservations", "auto_backup", "error_monitoring",
-                                 "backup_interval_hours")},
+                                 "backup_interval_hours", "phone_verification_enabled")},
 }
 # settings read once at process start (shown with a warning in the panel)
 RESTART_REQUIRED: set[str] = set()
@@ -117,7 +118,7 @@ CHOICES = {"catalog_sort": {"manual", "price_asc", "price_desc", "popular", "new
 BOOL_KEYS = {
     "stars_enabled", "manual_enabled", "maintenance_mode", "notify_orders", "notify_payments", "notify_tickets",
     "auto_complete_digital", "low_stock_alerts", "notification_retry", "expire_reservations", "auto_backup",
-    "error_monitoring", "show_out_of_stock", "guarantee_enabled", "country_requests_enabled", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
+    "error_monitoring", "show_out_of_stock", "guarantee_enabled", "country_requests_enabled", "phone_verification_enabled", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
 }
 POSITIVE_NUMBER_KEYS = {"uah_per_star", "min_topup", "max_topup"}
 NON_NEGATIVE_NUMBER_KEYS = {"min_order_total", "max_order_total", "big_order_threshold"}

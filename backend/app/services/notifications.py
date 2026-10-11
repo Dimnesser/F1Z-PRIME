@@ -69,6 +69,7 @@ TEMPLATES: dict[str, tuple[str, str, str, str, bool]] = {
     "staff_out_of_stock": ("staff", "Товар закончился", "🚫 <b>Закончился товар</b>\n{product_name}", "", True),
     "staff_new_ticket": ("staff", "Новое обращение", "🆘 <b>Обращение {ticket_id}</b>: {reason}", "", True),
     "staff_incident": ("staff", "Критическая ошибка", "⚠️ <b>{reason}</b>", "", True),
+    "staff_phone_verification": ("staff", "Проверка номера", "📞 <b>Заявка на подтверждение номера</b>\nЗаказ {order_no} · {product_name}\n{reason}", "", True),
     "staff_daily_summary": ("staff", "Ежедневная сводка", "📊 <b>Сводка за {date}</b>\n{reason}", "", True),
 }
 
@@ -79,6 +80,7 @@ STAFF_KIND_PERMISSION = {
     "staff_refund_request": "refunds.approve", "staff_low_stock": "products.stock",
     "staff_out_of_stock": "products.stock", "staff_new_ticket": "support.reply",
     "staff_incident": "system.view", "staff_daily_summary": "finance.view",
+    "staff_phone_verification": "orders.fulfill",
 }
 
 CRITICAL = {"staff_incident", "staff_fulfillment_failed"}
