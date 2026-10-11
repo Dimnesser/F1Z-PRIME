@@ -98,7 +98,17 @@ lock, per-user and total limits, scope, window, released on cancel/expiry), prod
 attributes / sale window / per-order & per-user limits / price history / copy / bulk sale & tags, storefront
 settings (sort, out-of-stock) applied, rules engine WHEN→IF→THEN (`services/rules.py`, `api/admin_rules.py`).
 
-Remaining: Stage D (admin UI for all of this + Mini App UI), Stage E (deploy via deploy key with backups, verify).
+Stage D ✅: admin UI moved from fixed roles to permissions; new pages Team (staff/roles/approvals), Promo, Rules
+(builder + dry-run + run history), System (status, backups, notification templates), Inbox, Automation center
+(health, metrics, dead jobs, incidents, tasks), order card with server timeline / fulfillment / refunds, products
+with sale/schedule/tags/attributes/inventory units/price & stock history, dashboard widget prefs + compact mode.
+Mini App: promo code at checkout, sale prices, tags/attributes, order stage, delivered keys, one-tap order support.
+Checks: backend 117 passed; admin + Mini App tsc and vite builds clean; Playwright E2E against the local API
+(built admin, embedded worker): 17 pages × desktop/phone without console errors or 5xx, and 14 real click
+scenarios OK (key upload with duplicate skipped, auto-delivery, key masked for staff, order timeline, invite by
+Telegram ID, new role, promo code, rule + dry-run + save, template preview, inbox, run task now).
+
+Remaining: Stage E (deploy via deploy key with backups, verify).
 
 Continue with: `cd /home/user/F1Z-PRIME && service postgresql start && python3 -m pytest -q` then
 implement the remaining stages listed above (see task list in this file).

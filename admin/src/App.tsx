@@ -88,6 +88,8 @@ export default function App() {
   }, [])
   useEffect(() => {
     if (!me) return
+    // per-admin interface preference, applied on every page (not only the dashboard)
+    api<{ compact?: boolean }>('/prefs').then((p) => document.documentElement.classList.toggle('compact', Boolean(p?.compact))).catch(() => {})
     void refreshCounters()
     const t = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refreshCounters()

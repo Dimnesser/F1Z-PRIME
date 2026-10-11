@@ -371,7 +371,7 @@ function SettingsTab({ status: s, onChanged }: { status: SystemStatus | null; on
         ]} />
 
       <SettingsSection title="Заказы и склад" rows={rows} onSaved={setRows} readOnly={!canAuto} fields={[
-        { key: 'auto_complete_digital', label: 'Автозавершение цифровых товаров', hint: 'Оплаченный заказ из категории «digital» с заполненной инструкцией сразу выдаётся покупателю' },
+        { key: 'auto_complete_digital', label: 'Автовыдача товаров', hint: 'Общий выключатель: товары с режимом «Автовыдача» выдаются сразу после подтверждённой оплаты (ключи из склада или текст выдачи). Выключено — такие заказы уходят оператору' },
         { key: 'expire_reservations', label: 'Очистка просроченных резервов', hint: 'Неоплаченные заказы отменяются по таймеру, товар возвращается в продажу' },
         { key: 'low_stock_alerts', label: 'Уведомления о низких остатках', hint: 'Сообщение администраторам в Telegram, когда остаток опускается до порога' },
         { key: 'low_stock_threshold', label: 'Порог низкого остатка', suffix: 'шт' },

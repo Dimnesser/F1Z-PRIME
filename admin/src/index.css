@@ -41,3 +41,9 @@ body { @apply font-sans text-ink antialiased; overflow-x: hidden; }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Compact density (per-admin preference «компактный режим», class set on <html>): spacing is rem-based, so a
+   smaller root size tightens paddings/gaps everywhere; px-sized text and table cells are trimmed explicitly. */
+html.compact { font-size: 14px; }
+html.compact .td { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+html.compact .th { padding-top: 0.5rem; padding-bottom: 0.5rem; }
