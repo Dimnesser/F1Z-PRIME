@@ -5,8 +5,9 @@ import { Layout } from './components/Layout'
 import { Skeleton } from './components/ui'
 import { api, auth, telegramLogin } from './lib/api'
 import { backToShop, initTelegram, inTelegram, attachTelegramBackButton } from './lib/telegram'
-import { SessionCtx } from './lib/session'
-import type { Me } from './lib/types'
+import { hasPerm, SessionCtx } from './lib/session'
+import type { Counters, Me } from './lib/types'
+import { NAV } from './components/Layout'
 import Login from './pages/Login'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -19,6 +20,11 @@ const Finance = lazy(() => import('./pages/Finance'))
 const Support = lazy(() => import('./pages/Support'))
 const Automation = lazy(() => import('./pages/Automation'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Promo = lazy(() => import('./pages/Promo'))
+const Rules = lazy(() => import('./pages/Rules'))
+const Team = lazy(() => import('./pages/Team'))
+const System = lazy(() => import('./pages/System'))
+const Inbox = lazy(() => import('./pages/Inbox'))
 
 function PageFallback() {
   return (
@@ -34,7 +40,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [checking, setChecking] = useState(Boolean(auth.get()) || inTelegram)
   const [tgDenied, setTgDenied] = useState<string | null>(null)
-  const [counters, setCounters] = useState({ tickets: 0, review: 0 })
+  const [counters, setCounters] = useState<Counters>({ inbox: 0 })
   const location = useLocation()
 
   useEffect(() => {
@@ -77,8 +83,7 @@ export default function App() {
   // badge counters for the navigation (open tickets, payments waiting for review)
   const refreshCounters = useCallback(async () => {
     try {
-      const d = await api<{ open_tickets: number; pending_payments: number }>('/dashboard?days=7')
-      setCounters({ tickets: d.open_tickets, review: d.pending_payments })
+      setCounters(await api<Counters>('/counters'))
     } catch { /* not critical */ }
   }, [])
   useEffect(() => {
@@ -94,24 +99,31 @@ export default function App() {
   if (!me && inTelegram) return <TelegramDenied text={tgDenied ?? 'Сессия завершена'} />
   if (!me) return <Login onLogin={setMe} />
 
-  const manager = me.role !== 'support'
+  const allow = (...perms: string[]) => hasPerm(me, ...perms)
+  const home = NAV.find((n) => !n.perms || hasPerm(me, ...n.perms))?.to ?? '/inbox'
   return (
     <SessionCtx.Provider value={me}>
       <Layout counters={counters} onLogout={() => { auth.clear(); if (inTelegram) backToShop(); else setMe(null) }}>
         <ErrorBoundary resetKey={location.pathname}>
         <Suspense fallback={<PageFallback />}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/users" element={<Users />} />
-            <Route path="/support" element={<Support onChange={refreshCounters} />} />
+            <Route path="/" element={allow('analytics.view') ? <Dashboard /> : <Navigate to={home} replace />} />
+            {allow('orders.view') && <Route path="/orders" element={<Orders />} />}
+            {allow('orders.view') && <Route path="/orders/:orderId" element={<Orders />} />}
+            {allow('users.view') && <Route path="/users" element={<Users />} />}
+            {allow('support.view') && <Route path="/support" element={<Support onChange={refreshCounters} />} />}
             <Route path="/settings" element={<Settings />} />
-            {manager && <Route path="/products" element={<Products />} />}
-            {manager && <Route path="/premium" element={<Premium />} />}
-            {manager && <Route path="/countries" element={<Countries />} />}
-            {manager && <Route path="/finance" element={<Finance onChange={refreshCounters} />} />}
-            {manager && <Route path="/automation" element={<Automation />} />}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/inbox" element={<Inbox onChange={refreshCounters} />} />
+            {allow('products.view') && <Route path="/products" element={<Products />} />}
+            {allow('promo.manage') && <Route path="/promo" element={<Promo />} />}
+            {allow('products.edit') && <Route path="/premium" element={<Premium />} />}
+            {allow('products.edit') && <Route path="/countries" element={<Countries />} />}
+            {allow('payments.view', 'finance.view') && <Route path="/finance" element={<Finance onChange={refreshCounters} />} />}
+            {allow('system.view') && <Route path="/automation" element={<Automation />} />}
+            {allow('system.view') && <Route path="/rules" element={<Rules />} />}
+            {allow('system.view') && <Route path="/system" element={<System />} />}
+            {allow('staff.manage', 'staff.roles', 'refunds.approve') && <Route path="/team" element={<Team onChange={refreshCounters} />} />}
+            <Route path="*" element={<Navigate to={home} replace />} />
           </Routes>
         </Suspense>
         </ErrorBoundary>

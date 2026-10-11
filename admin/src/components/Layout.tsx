@@ -1,38 +1,45 @@
 import clsx from 'clsx'
 import {
-  ArrowLeft, Boxes, ChevronsLeft, Store, CreditCard, Gem, Globe2, Headphones, LayoutDashboard, LogOut, MoreHorizontal, Settings,
-  ShoppingCart, Users, Workflow, X,
+  ArrowLeft, Bell, Boxes, ChevronsLeft, Store, CreditCard, Gem, Globe2, Headphones, LayoutDashboard, LogOut, MoreHorizontal, Settings,
+  ServerCog, ShieldCheck, ShoppingCart, Sparkles, TicketPercent, Users, Workflow, X,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { useMe } from '../lib/session'
+import { hasPerm, useMe } from '../lib/session'
 import { backToShop, inTelegram } from '../lib/telegram'
-import type { Role } from '../lib/types'
+import type { Counters } from '../lib/types'
 
-export const NAV: { to: string; label: string; icon: typeof Users; roles?: Role[]; badge?: 'tickets' | 'review' }[] = [
-  { to: '/', label: 'Обзор', icon: LayoutDashboard },
-  { to: '/orders', label: 'Заказы', icon: ShoppingCart },
-  { to: '/users', label: 'Пользователи', icon: Users },
-  { to: '/products', label: 'Товары', icon: Boxes, roles: ['owner', 'admin'] },
-  { to: '/premium', label: 'Красивые номера', icon: Gem, roles: ['owner', 'admin'] },
-  { to: '/countries', label: 'Страны', icon: Globe2, roles: ['owner', 'admin'] },
-  { to: '/finance', label: 'Финансы', icon: CreditCard, roles: ['owner', 'admin'], badge: 'review' },
-  { to: '/support', label: 'Поддержка', icon: Headphones, badge: 'tickets' },
-  { to: '/automation', label: 'Автоматизация', icon: Workflow, roles: ['owner', 'admin'] },
+type BadgeKey = 'tickets' | 'review' | 'incidents' | 'approvals' | 'inbox'
+/** `perms`: any of them shows the item (the server enforces the same permissions on every request) */
+export const NAV: { to: string; label: string; icon: typeof Users; perms?: string[]; badge?: BadgeKey }[] = [
+  { to: '/', label: 'Обзор', icon: LayoutDashboard, perms: ['analytics.view'] },
+  { to: '/orders', label: 'Заказы', icon: ShoppingCart, perms: ['orders.view'] },
+  { to: '/users', label: 'Пользователи', icon: Users, perms: ['users.view'] },
+  { to: '/products', label: 'Товары', icon: Boxes, perms: ['products.view'] },
+  { to: '/promo', label: 'Промокоды', icon: TicketPercent, perms: ['promo.manage'] },
+  { to: '/premium', label: 'Красивые номера', icon: Gem, perms: ['products.edit'] },
+  { to: '/countries', label: 'Страны', icon: Globe2, perms: ['products.edit'] },
+  { to: '/finance', label: 'Финансы', icon: CreditCard, perms: ['payments.view', 'finance.view'], badge: 'review' },
+  { to: '/support', label: 'Поддержка', icon: Headphones, perms: ['support.view'], badge: 'tickets' },
+  { to: '/automation', label: 'Автоматизация', icon: Workflow, perms: ['system.view'], badge: 'incidents' },
+  { to: '/rules', label: 'Правила', icon: Sparkles, perms: ['system.view'] },
+  { to: '/team', label: 'Команда', icon: ShieldCheck, perms: ['staff.manage', 'staff.roles', 'refunds.approve'], badge: 'approvals' },
+  { to: '/system', label: 'Система', icon: ServerCog, perms: ['system.view'] },
+  { to: '/inbox', label: 'Уведомления', icon: Bell, badge: 'inbox' },
   { to: '/settings', label: 'Настройки', icon: Settings },
 ]
 const MOBILE_MAIN = ['/', '/orders', '/products', '/support']
 const COLLAPSE_KEY = 'f1z_admin_sidebar'
 
-export function Layout({ children, onLogout, counters }: { children: ReactNode; onLogout: () => void; counters: { tickets: number; review: number } }) {
+export function Layout({ children, onLogout, counters }: { children: ReactNode; onLogout: () => void; counters: Counters }) {
   const me = useMe()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === '1' } catch { return false }
   })
   const [more, setMore] = useState(false)
-  const items = NAV.filter((n) => !n.roles || n.roles.includes(me.role))
-  const mainMobile = items.filter((n) => MOBILE_MAIN.includes(n.to) || (me.role === 'support' && n.to === '/users'))
+  const items = NAV.filter((n) => !n.perms || hasPerm(me, ...n.perms))
+  const mainMobile = items.filter((n) => MOBILE_MAIN.includes(n.to)).slice(0, 4)
   const rest = items.filter((n) => !mainMobile.includes(n))
 
   useEffect(() => {
@@ -46,7 +53,7 @@ export function Layout({ children, onLogout, counters }: { children: ReactNode; 
       return !c
     })
   }
-  const count = (b?: 'tickets' | 'review') => (b ? counters[b] : 0)
+  const count = (b?: BadgeKey) => (b ? counters[b] ?? 0 : 0)
 
   return (
     <div className="flex min-h-screen">
@@ -117,7 +124,13 @@ export function Layout({ children, onLogout, counters }: { children: ReactNode; 
             )}
             <span className="truncate font-display text-[15px] font-bold">{inTelegram ? 'Админ-панель' : <>F1Z <span className="text-primary-soft">PRIME</span></>}</span>
           </div>
-          <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-muted">{me.role_label}</span>
+          <div className="flex items-center gap-2">
+            <NavLink to="/inbox" aria-label="Уведомления" className="relative grid h-9 w-9 place-items-center rounded-xl bg-white/[0.06]">
+              <Bell className="h-[18px] w-[18px]" />
+              {counters.inbox > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[9.5px] font-bold text-white">{counters.inbox}</span>}
+            </NavLink>
+            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-muted">{me.role_label}</span>
+          </div>
         </header>
         <div className="mx-auto w-full max-w-[1400px] px-4 pb-28 pt-5 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">{children}</div>
       </main>

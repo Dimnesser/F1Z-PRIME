@@ -1,5 +1,9 @@
-export type Role = 'owner' | 'admin' | 'support'
-export interface Me { username: string; role: Role; role_label: string; dev_mode: boolean; environment: string }
+export type Role = string
+export interface Me {
+  username: string; role: Role; role_label: string; dev_mode: boolean; environment: string
+  is_owner: boolean; permissions: string[]; limits: Record<string, number | string>; key: string
+}
+export interface Counters { inbox: number; tickets?: number; review?: number; incidents?: number; approvals?: number }
 
 export interface Country { id: number; code: string; name: string; flag: string; dial_code: string; sort_order: number; is_active: boolean }
 export interface Category { id: number; slug: string; title: string; icon: string; sort_order: number; is_active: boolean }
@@ -12,6 +16,12 @@ export interface Product {
   id: number; title: string; description: string; category: string; price: number; stock: number; is_popular: boolean
   country: Country | null; status: ProductStatus; sort_order: number; country_id: number | null; delivery_note: string
   created_at: string; updated_at: string
+  /** base price is `price`; the sale price applies while sale_ends_at is null or in the future */
+  old_price?: number | null; sale_price: number | null; sale_ends_at: string | null
+  fulfillment_mode: 'auto' | 'manual' | 'review'; uses_inventory: boolean
+  tags: string[]; attributes: Record<string, string>
+  available_from: string | null; available_until: string | null
+  max_per_order: number | null; max_per_user: number | null
 }
 export interface Premium {
   id: number; title: string; tier: string; display_mask: string; description: string; price: number
