@@ -186,3 +186,67 @@ async def test_list_search_filter_and_history(client, admin_headers, user_header
 async def test_regular_user_cannot_reach_admin_phones(client, user_headers):
     assert (await client.get("/api/admin/phones", headers=user_headers)).status_code == 401
     assert (await client.post("/api/admin/phones", json={"phone": "+14155559999"}, headers=user_headers)).status_code == 401
+
+
+# ----- payment edge cases for phone orders (stage 2: idempotency / no double-sale) -------------
+
+
+async def _auto_phone_product(client, admin_headers, dial: str, code: str):
+    await client.put("/api/admin/settings", json={"values": {"auto_complete_digital": "true"}}, headers=admin_headers)
+    await client.post("/api/admin/phones/bulk", json={"text": dial}, headers=admin_headers)
+    prod = await _numbers_product(client, admin_headers, code)
+    await client.patch(f"/api/admin/products/{prod['product_id']}", json={"fulfillment_mode": "auto"}, headers=admin_headers)
+    return prod
+
+
+async def test_phone_insufficient_balance_does_not_deliver(client, admin_headers, user_headers):
+    prod = await _auto_phone_product(client, admin_headers, "+380671234701", "UA")  # one number, no funds
+    order = (await client.post("/api/orders", json={"product_id": prod["product_id"], "idempotency_key": "ph-ins-001"},
+                               headers=user_headers)).json()
+    r = await client.post(f"/api/orders/{order['id']}/pay", json={"method": "balance"}, headers=user_headers)
+    assert r.status_code == 402  # no money -> no fake success, nothing delivered
+    detail = (await client.get(f"/api/orders/{order['id']}", headers=user_headers)).json()
+    assert detail["status"] != "completed" and detail["delivered_items"] == []
+    async with session_factory()() as s:
+        assert await s.scalar(select(func.count()).select_from(PhoneInventory).where(
+            PhoneInventory.sold_order_id == order["id"])) == 0  # never sold
+
+
+async def test_phone_double_balance_pay_sells_one_number(client, admin_headers, user_headers):
+    prod = await _auto_phone_product(client, admin_headers, "+380671234702", "UA")
+    await _fund(client, admin_headers, user_headers)
+    order = (await client.post("/api/orders", json={"product_id": prod["product_id"], "idempotency_key": "ph-dbl-001"},
+                               headers=user_headers)).json()
+    r1 = await client.post(f"/api/orders/{order['id']}/pay", json={"method": "balance"}, headers=user_headers)
+    assert r1.status_code == 200 and r1.json()["order"]["status"] == "completed"
+    r2 = await client.post(f"/api/orders/{order['id']}/pay", json={"method": "balance"}, headers=user_headers)
+    assert r2.status_code == 409  # no second charge, no second number
+    async with session_factory()() as s:
+        assert await s.scalar(select(func.count()).select_from(PhoneInventory).where(
+            PhoneInventory.status == "SOLD", PhoneInventory.sold_order_id == order["id"])) == 1
+
+
+async def test_phone_stars_webhook_replay_delivers_one_number(client, admin_headers, user_headers):
+    from app.models import Payment
+    from app.services import payments
+    from app.worker import run_jobs
+
+    prod = await _auto_phone_product(client, admin_headers, "+380671234703", "UA")
+    order = (await client.post("/api/orders", json={"product_id": prod["product_id"], "idempotency_key": "ph-str-001"},
+                               headers=user_headers)).json()
+    pay = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "stars"}, headers=user_headers)).json()
+    stars = pay["payment"]["stars_amount"]
+    async with session_factory()() as s:
+        payload = (await s.get(Payment, pay["payment"]["id"])).payload
+    for _ in range(3):  # Telegram may redeliver the successful-payment update
+        async with session_factory()() as s:
+            await payments.process_stars_payment(s, payload, "charge-ph-1", stars, "XTR", 5550001)
+            await s.commit()
+    # the worker delivers the number; running it repeatedly (worker restart / redelivered job) stays a no-op
+    await run_jobs()
+    await run_jobs()
+    detail = (await client.get(f"/api/orders/{order['id']}", headers=user_headers)).json()
+    assert detail["status"] == "completed" and len(detail["delivered_items"]) == 1
+    async with session_factory()() as s:
+        assert await s.scalar(select(func.count()).select_from(PhoneInventory).where(
+            PhoneInventory.status == "SOLD", PhoneInventory.sold_order_id == order["id"])) == 1
