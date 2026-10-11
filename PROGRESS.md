@@ -112,3 +112,15 @@ Remaining: Stage E (deploy via deploy key with backups, verify).
 
 Continue with: `cd /home/user/F1Z-PRIME && service postgresql start && python3 -m pytest -q` then
 implement the remaining stages listed above (see task list in this file).
+
+## Stage E — Deploy 21fecb1 to vps4 (IN PROGRESS, waiting for the server build)
+- Deploy script `f1z-deploy-21fecb1` (Webdock user script 415659) ran 2026-10-11 08:02 (UTC+2):
+  cloned branch `ccr-27c43927-xio4pi` over the read-only deploy key, commit verified `21fecb1`.
+  Backups: `/root/f1z-backup/db-20261011-060218.sql.gz` (16 tables), `/root/f1z-backup/code-20261011-060218.tgz`.
+  `.env` sha256 identical before/after. Build runs in background (`/root/f1z/run-v3.sh`, log `/root/f1z/v3.log`);
+  the old version (97a99e9) keeps serving until `docker compose up -d` swaps containers.
+- A background waiter (`/root/f1z/wait-verify-v3.sh`, launched by user script 415662) waits for `V3_FINISHED`,
+  then runs the read-only check `/root/f1z/f1z-verify-v3.sh` and writes `/root/f1z/verify-v3-result.txt`
+  (ends with `DONE`). No rebuild, no new deploy.
+- Next step: read `/root/f1z/verify-v3-result.txt` once (Webdock fetch file) and report DEPLOYED_COMMIT,
+  containers (incl. new `worker`), alembic=0006, HTTPS/API/Mini App/admin/bot checks, worker heartbeat, log errors.
