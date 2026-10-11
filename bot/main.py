@@ -27,9 +27,11 @@ async def setup_bot(bot: Bot) -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="🚀 Главное меню"),
+            BotCommand(command="shop", description="🛍 Магазин"),
             BotCommand(command="catalog", description="🛍 Каталог"),
             BotCommand(command="premium", description="💎 Красивые номера"),
             BotCommand(command="profile", description="👤 Профиль"),
+            BotCommand(command="balance", description="💳 Баланс"),
             BotCommand(command="orders", description="📦 Мои покупки"),
             BotCommand(command="support", description="🆘 Поддержка"),
         ]

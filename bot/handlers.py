@@ -105,8 +105,8 @@ async def show_menu(event: Message | CallbackQuery, state: FSMContext) -> None:
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(
-        "ℹ️ <b>Команды</b>\n/start — главное меню\n/catalog — каталог\n/premium — красивые номера\n"
-        "/profile — профиль\n/orders — мои покупки\n/support — поддержка",
+        "ℹ️ <b>Команды</b>\n/start — главное меню\n/shop, /catalog — каталог\n/premium — красивые номера\n"
+        "/profile — профиль\n/balance — баланс\n/orders — мои покупки\n/support — поддержка",
         reply_markup=rows(menu_row()),
     )
 
@@ -114,7 +114,7 @@ async def cmd_help(message: Message) -> None:
 # ------------------------------------------------------------------ catalog
 
 
-@router.message(Command("catalog"))
+@router.message(Command("catalog", "shop"))
 @router.callback_query(F.data == "catalog")
 async def show_catalog(event: Message | CallbackQuery) -> None:
     async with session_factory()() as session:
@@ -303,7 +303,7 @@ async def _get_user(tg_user: TgUser) -> User:
         return user
 
 
-@router.message(Command("profile"))
+@router.message(Command("profile", "balance"))
 @router.callback_query(F.data == "profile")
 async def show_profile(event: Message | CallbackQuery) -> None:
     if event.from_user is None:
