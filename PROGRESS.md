@@ -113,7 +113,7 @@ Remaining: Stage E (deploy via deploy key with backups, verify).
 Continue with: `cd /home/user/F1Z-PRIME && service postgresql start && python3 -m pytest -q` then
 implement the remaining stages listed above (see task list in this file).
 
-## Stage E — Deploy 21fecb1 to vps4 (IN PROGRESS, waiting for the server build)
+## Stage E — Deploy 21fecb1 to vps4 ✅ (DEPLOYED_COMMIT 21fecb1)
 - Deploy script `f1z-deploy-21fecb1` (Webdock user script 415659) ran 2026-10-11 08:02 (UTC+2):
   cloned branch `ccr-27c43927-xio4pi` over the read-only deploy key, commit verified `21fecb1`.
   Backups: `/root/f1z-backup/db-20261011-060218.sql.gz` (16 tables), `/root/f1z-backup/code-20261011-060218.tgz`.
@@ -124,3 +124,9 @@ implement the remaining stages listed above (see task list in this file).
   (ends with `DONE`). No rebuild, no new deploy.
 - Next step: read `/root/f1z/verify-v3-result.txt` once (Webdock fetch file) and report DEPLOYED_COMMIT,
   containers (incl. new `worker`), alembic=0006, HTTPS/API/Mini App/admin/bot checks, worker heartbeat, log errors.
+- Result (`/root/f1z/verify-v3-result.txt`, DONE, 2026-10-11 06:05 UTC): V3_UP_OK; containers api (healthy),
+  web (healthy), bot, worker (new), db (healthy, not restarted); alembic 0003→0004→0005→0006; data kept
+  (users 4, orders 3 — all got public_id, products 8, payments 11); 8 built-in roles seeded; all worker tasks ran
+  once without failures; /system/status version=21fecb1, api/db/worker/bot ok; 21 admin endpoints 200 for the
+  owner; stranger exchange 403, admin API without auth 401; Mini App 200 (TLS valid), new public endpoints OK;
+  no errors in api/worker logs; bot token not in logs; memory: worker 59/160 MiB, api 97/256, bot 130/192.
