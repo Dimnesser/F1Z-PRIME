@@ -157,7 +157,7 @@ implement the remaining stages listed above (see task list in this file).
 - NOT integrated: the uploaded legacy `bot.py`, `accounts.db`, `.session` files and receipts — those contain real
   Telegram account credentials and personal data and are deliberately excluded from the repo and the server.
 
-## Stage H — UI/UX redesign 2026 «Midnight Premium» (not deployed)
+## Stage H — UI/UX redesign 2026 «Midnight Premium» ✅ deployed (DEPLOYED_COMMIT 14830ea)
 - Base: fast-forward of this branch to `4bdd0d5` (head of `ccr-27c43927-xio4pi`); redesign commits on top.
 - Mini App: CSS-variable design tokens (palette #080B12 / #111624 / #171E2E, accent #756BFF, #34D5C5), light theme
   that follows Telegram (Profile → Оформление: Авто / Тёмная / Светлая), component library in `components/ui.tsx`,
@@ -175,3 +175,10 @@ implement the remaining stages listed above (see task list in this file).
   bottom nav, order cancel dialog, theme switch, loading / error / empty states; no horizontal overflow at
   320 / 360 / 375 / 414 / 430 px; admin pages at 1440 and 390 px without page errors.
   Not checked: a real Telegram client WebView, real payments, the real SMS provider.
+- Deploy 2026-10-12 12:31 UTC by owner's request: Webdock account script `f1z-deploy-14830ea` (id 416365), run
+  detached on vps4; result `/root/f1z/deploy-14830ea-result.txt` = DEPLOY OK. Previous: `33dfca0`.
+  Backups: `/root/f1z-backup/db-20261012-123105.sql.gz` (gzip OK), `env-20261012-123105.bak`, code snapshot
+  `/opt/f1z-prime.prev-20261012-123105` (rollback). Migration 0010 applied (`alembic current = 0010 (head)`,
+  owned_sms tables created empty). Data kept: orders/products/users = 4/17/11; `sms_enabled` still false.
+  Checks: api healthy after ~5 s, bot/worker/web restarted, Mini App and /admin/ 200 over HTTPS and serve the new
+  build, /balance 200, admin SMS API without auth 401, no error lines in api/bot/worker logs.
