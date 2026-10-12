@@ -819,6 +819,7 @@ class SmsActivation(Base):
     status: Mapped[str] = mapped_column(String(32), default="RESERVED", server_default="RESERVED", nullable=False)
     code: Mapped[str | None] = mapped_column(String(32))
     cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, server_default="0", nullable=False)
+    provider_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, server_default="0", nullable=False)
     refunded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -198,3 +198,85 @@ async def test_outbox_unknown_then_failed(client, admin_headers, user_headers, m
         await s.commit()
         box = await s.scalar(select(DeliveryOutbox).where(DeliveryOutbox.sms_activation_id == aid))
         assert box.status == "FAILED"
+
+
+# ----- public + admin API (stage 3/8) --------------------------------------------------------
+
+from tests.conftest import init_data_for  # noqa: E402
+
+
+def _tma(uid: int) -> dict:
+    return {"Authorization": f"tma {init_data_for(uid, username=f'u{uid}')}"}
+
+
+async def _enable_sms(client, admin_headers, markup="50", min_profit="0") -> None:
+    await client.put("/api/admin/settings", json={"values": {
+        "sms_enabled": "true", "sms_markup_percent": markup, "sms_min_profit": min_profit}}, headers=admin_headers)
+
+
+async def test_sms_api_requires_auth(client):
+    assert (await client.get("/api/sms/countries")).status_code == 401
+    assert (await client.post("/api/sms/purchase", json={"country": "0", "service": "tg", "idempotency_key": "nope-0001"})).status_code == 401
+
+
+async def test_sms_catalog_and_prices(client, admin_headers, user_headers):
+    await _enable_sms(client, admin_headers, markup="50")
+    countries = (await client.get("/api/sms/countries", headers=user_headers)).json()
+    assert any(c["code"] == "0" for c in countries)
+    prices = (await client.get("/api/sms/prices", headers=user_headers)).json()
+    assert prices["configured"] is True
+    tg0 = next(i for i in prices["items"] if i["country"] == "0" and i["service"] == "tg")
+    assert tg0["price"] == 27.0 and tg0["count"] == 120  # 18.00 * 1.5
+
+
+async def test_sms_disabled_when_off(client, user_headers):
+    assert (await client.get("/api/sms/countries", headers=user_headers)).status_code == 404  # sms_enabled default false
+
+
+async def test_sms_pricing_not_configured_refuses(client, admin_headers, user_headers):
+    await client.put("/api/admin/settings", json={"values": {"sms_enabled": "true"}}, headers=admin_headers)  # no markup
+    prices = (await client.get("/api/sms/prices", headers=user_headers)).json()
+    assert prices["configured"] is False and prices["items"] == []
+    uid = (await client.get("/api/me", headers=user_headers)).json()["id"]
+    await client.post(f"/api/admin/users/{uid}/balance", json={"amount": "100", "reason": "тест"}, headers=admin_headers)
+    r = await client.post("/api/sms/purchase", json={"country": "0", "service": "tg", "idempotency_key": "nomk-0001"}, headers=user_headers)
+    assert r.status_code == 409 and r.json()["code"] == "pricing_not_configured"
+
+
+async def test_sms_purchase_charges_server_price(client, admin_headers, user_headers):
+    await _enable_sms(client, admin_headers, markup="50")
+    uid = (await client.get("/api/me", headers=user_headers)).json()["id"]
+    await client.post(f"/api/admin/users/{uid}/balance", json={"amount": "100", "reason": "тест"}, headers=admin_headers)
+    r = await client.post("/api/sms/purchase", json={"country": "0", "service": "tg", "idempotency_key": "buy-0001"}, headers=user_headers)
+    assert r.status_code == 201, r.text
+    act = r.json()
+    assert act["status"] == "WAITING" and act["cost"] == 27.0
+    assert (await client.get("/api/me", headers=user_headers)).json()["balance"] == 73
+    # double-tap: a second purchase while active returns the SAME activation, no second charge
+    r2 = await client.post("/api/sms/purchase", json={"country": "0", "service": "tg", "idempotency_key": "buy-0002"}, headers=user_headers)
+    assert r2.json()["id"] == act["id"]
+    assert (await client.get("/api/me", headers=user_headers)).json()["balance"] == 73
+
+
+async def test_sms_purchase_insufficient_balance(client, admin_headers, user_headers):
+    await _enable_sms(client, admin_headers, markup="50")
+    r = await client.post("/api/sms/purchase", json={"country": "0", "service": "tg", "idempotency_key": "poor-0001"}, headers=user_headers)
+    assert r.status_code == 402
+
+
+async def test_sms_activation_idor(client, admin_headers, user_headers):
+    await _enable_sms(client, admin_headers, markup="50")
+    uid = (await client.get("/api/me", headers=user_headers)).json()["id"]
+    await client.post(f"/api/admin/users/{uid}/balance", json={"amount": "100", "reason": "тест"}, headers=admin_headers)
+    act = (await client.post("/api/sms/purchase", json={"country": "0", "service": "tg", "idempotency_key": "idor-0001"}, headers=user_headers)).json()
+    other = _tma(99881)
+    await client.get("/api/me", headers=other)  # create the other user
+    assert (await client.get(f"/api/sms/activations/{act['id']}", headers=other)).status_code == 404
+
+
+async def test_sms_admin_summary_and_reconcile(client, admin_headers, user_headers):
+    await _enable_sms(client, admin_headers, markup="50")
+    s = (await client.get("/api/admin/sms/summary", headers=admin_headers)).json()
+    assert {"by_status", "reconciliation_required", "profit"} <= s.keys()
+    cat = (await client.get("/api/admin/sms/catalog", headers=admin_headers)).json()
+    assert cat["rows"] and any(r["priced"] for r in cat["rows"])

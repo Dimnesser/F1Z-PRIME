@@ -90,6 +90,14 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str, bool]] = {
     "quiet_hours_end": ("08:00", "Конец тихих часов (Киев)", False),
     "daily_summary": ("true", "Ежедневная сводка продаж владельцу", False),
     "backup_interval_hours": ("24", "Интервал резервного копирования, часов", False),
+    # --- SMS-activation catalog & pricing (private). Empty markup = not configured -> item not sold.
+    "sms_enabled": ("false", "Продажа виртуальных номеров (SMS-активации) включена", False),
+    "sms_markup_percent": ("", "Глобальная наценка к цене провайдера, % (пусто — не настроено)", False),
+    "sms_min_profit": ("0", "Минимальная прибыль с одной активации, грн", False),
+    "sms_markup_country": ("{}", "Наценка по странам, % — JSON {\"0\":30}", False),
+    "sms_markup_service": ("{}", "Наценка по сервисам, % — JSON {\"tg\":50}", False),
+    "sms_disabled_items": ("[]", "Отключённые позиции — JSON [\"country:service\"]", False),
+    "sms_catalog_ttl_seconds": ("300", "Кэш каталога провайдера, секунд", False),
 }
 
 GROUP: dict[str, str] = {
@@ -109,6 +117,8 @@ GROUP: dict[str, str] = {
     **{k: "automation" for k in ("auto_complete_digital", "low_stock_alerts", "low_stock_threshold",
                                  "notification_retry", "expire_reservations", "auto_backup", "error_monitoring",
                                  "backup_interval_hours", "phone_verification_enabled")},
+    **{k: "sms" for k in ("sms_enabled", "sms_markup_percent", "sms_min_profit", "sms_markup_country",
+                          "sms_markup_service", "sms_disabled_items", "sms_catalog_ttl_seconds")},
 }
 # settings read once at process start (shown with a warning in the panel)
 RESTART_REQUIRED: set[str] = set()
@@ -118,7 +128,7 @@ CHOICES = {"catalog_sort": {"manual", "price_asc", "price_desc", "popular", "new
 BOOL_KEYS = {
     "stars_enabled", "manual_enabled", "maintenance_mode", "notify_orders", "notify_payments", "notify_tickets",
     "auto_complete_digital", "low_stock_alerts", "notification_retry", "expire_reservations", "auto_backup",
-    "error_monitoring", "show_out_of_stock", "guarantee_enabled", "country_requests_enabled", "phone_verification_enabled", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
+    "error_monitoring", "show_out_of_stock", "guarantee_enabled", "country_requests_enabled", "phone_verification_enabled", "sms_enabled", "notify_customers", "notify_staff", "quiet_hours_enabled", "daily_summary",
 }
 POSITIVE_NUMBER_KEYS = {"uah_per_star", "min_topup", "max_topup"}
 NON_NEGATIVE_NUMBER_KEYS = {"min_order_total", "max_order_total", "big_order_threshold"}

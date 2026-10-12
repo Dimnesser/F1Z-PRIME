@@ -70,6 +70,11 @@ class ActivationProvider(ABC):
     async def get_active_activations(self) -> list[dict]:
         """For reconciliation after a get_number timeout: the provider's current active list."""
 
+    @abstractmethod
+    async def get_catalog(self) -> dict:
+        """Provider catalog: {countries: [{code,title}], services: [{code,title}],
+        prices: {country: {service: {cost: Decimal, count: int}}}}. Raises ProviderTimeout/Error."""
+
 
 class MockActivationProvider(ActivationProvider):
     """In-process fake for tests and for the UI before a real key is configured. No external calls."""
@@ -98,6 +103,19 @@ class MockActivationProvider(ActivationProvider):
 
     async def get_active_activations(self) -> list[dict]:
         return list(self._active.values())
+
+    async def get_catalog(self) -> dict:
+        # representative sandbox catalog for dev/tests (never shown in production without a real key)
+        return {
+            "countries": [{"code": "0", "title": "Россия"}, {"code": "1", "title": "Украина"},
+                          {"code": "2", "title": "Казахстан"}],
+            "services": [{"code": "tg", "title": "Telegram"}, {"code": "wa", "title": "WhatsApp"},
+                         {"code": "go", "title": "Google"}],
+            "prices": {
+                "0": {"tg": {"cost": Decimal("18.00"), "count": 120}, "wa": {"cost": Decimal("22.00"), "count": 40}},
+                "1": {"tg": {"cost": Decimal("20.00"), "count": 15}, "go": {"cost": Decimal("12.00"), "count": 0}},
+            },
+        }
 
     # test helper: simulate the provider receiving a code
     def _deliver_code(self, activation_id: str, code: str) -> None:
@@ -157,6 +175,27 @@ class SmsActivateProvider(ActivationProvider):
                         "service": a.get("serviceCode"), "status": "WAITING", "code": None})
         return out
 
+    async def get_catalog(self) -> dict:
+        import json
+
+        try:
+            countries = json.loads(await self._call("getCountries"))
+            prices_raw = json.loads(await self._call("getPrices"))
+        except ValueError as exc:
+            raise ProviderError(f"bad catalog response: {exc}") from exc
+        clist = [{"code": str(k), "title": (v.get("rus") or v.get("eng") or str(k))}
+                 for k, v in (countries.items() if isinstance(countries, dict) else [])]
+        prices: dict = {}
+        services: dict[str, str] = {}
+        for country, svcs in (prices_raw.items() if isinstance(prices_raw, dict) else []):
+            prices[str(country)] = {}
+            for svc, info in (svcs.items() if isinstance(svcs, dict) else []):
+                cost = Decimal(str(info.get("cost", 0)))
+                count = int(info.get("count", 0))
+                prices[str(country)][svc] = {"cost": cost, "count": count}
+                services.setdefault(svc, svc)
+        return {"countries": clist, "services": [{"code": c, "title": t} for c, t in services.items()], "prices": prices}
+
 
 def get_provider() -> ActivationProvider:
     s = get_settings()
@@ -203,14 +242,14 @@ async def _refund_once(session: AsyncSession, act: SmsActivation, reason: str) -
 
 
 async def buy(session: AsyncSession, user_id: int, chat_id: int, *, service: str, country: str, cost: Decimal,
-              provider: ActivationProvider | None = None) -> SmsActivation:
+              provider_cost: Decimal = Decimal("0"), provider: ActivationProvider | None = None) -> SmsActivation:
     """Reserve + charge + request a number. One in-flight activation per user (DB-enforced)."""
     prov = provider or get_provider()
     user = await lock(session, User, user_id)
     if user is None:
         raise ServiceError("Пользователь не найден", 404)
     act = SmsActivation(user_id=user_id, chat_id=chat_id, provider=prov.name, service=service,
-                        country=country, status="RESERVED", cost=money(cost),
+                        country=country, status="RESERVED", cost=money(cost), provider_cost=money(provider_cost),
                         expires_at=utcnow() + timedelta(minutes=ACTIVATION_TTL_MINUTES))
     # charge first; the partial unique index rejects a second active activation for this user
     await change_balance(session, user, -money(cost), TxType.purchase, f"SMS-активация {service}/{country}")
@@ -393,3 +432,114 @@ async def deliver_outbox(session: AsyncSession, limit: int = 20) -> int:
                 row.last_error = str(exc)[:500]
                 log.warning("outbox %s delivery indeterminate: %s", row.id, exc)
     return sent
+
+
+# ----------------------------------------------------------------- pricing & catalog
+
+import json  # noqa: E402
+import time  # noqa: E402
+
+from app.services import settings as settings_service  # noqa: E402
+
+_catalog_cache: dict = {"at": 0.0, "data": None}
+
+
+class PricingNotConfigured(ServiceError):
+    def __init__(self) -> None:
+        super().__init__("Наценка для SMS-активаций не настроена администратором", 409, "pricing_not_configured")
+
+
+def _resolve_markup(country: str, service: str, g: str, cmap: dict, smap: dict) -> Decimal | None:
+    """Most specific markup wins: service → country → global. None = not configured (do not sell)."""
+    for val in (smap.get(service), cmap.get(country), g):
+        if val not in (None, ""):
+            try:
+                return Decimal(str(val))
+            except (ArithmeticError, ValueError):
+                continue
+    return None
+
+
+async def _markups(session: AsyncSession) -> dict:
+    def _jload(raw: str, default):
+        try:
+            return json.loads(raw) if raw else default
+        except ValueError:
+            return default
+    return {
+        "global": (await settings_service.get_value(session, "sms_markup_percent")).strip(),
+        "country": _jload(await settings_service.get_value(session, "sms_markup_country"), {}),
+        "service": _jload(await settings_service.get_value(session, "sms_markup_service"), {}),
+        "min_profit": await settings_service.get_decimal(session, "sms_min_profit", "0"),
+        "disabled": set(_jload(await settings_service.get_value(session, "sms_disabled_items"), [])),
+    }
+
+
+def quote(provider_cost: Decimal, country: str, service: str, m: dict) -> Decimal:
+    """Final buyer price in shop currency via Decimal. Raises PricingNotConfigured if no markup applies."""
+    pct = _resolve_markup(country, service, m["global"], m["country"], m["service"])
+    if pct is None:
+        raise PricingNotConfigured()
+    price = money(provider_cost * (Decimal(1) + pct / Decimal(100)))
+    if price - money(provider_cost) < money(m["min_profit"]):
+        price = money(provider_cost) + money(m["min_profit"])
+    return price
+
+
+async def provider_catalog(session: AsyncSession, provider: ActivationProvider | None = None) -> dict:
+    """Cached provider catalog (TTL from settings). Raises ProviderTimeout/Error when unreachable."""
+    prov = provider or get_provider()
+    ttl = int(await settings_service.get_value(session, "sms_catalog_ttl_seconds") or 300)
+    now = time.monotonic()
+    if _catalog_cache["data"] is not None and now - _catalog_cache["at"] < ttl:
+        return _catalog_cache["data"]
+    data = await prov.get_catalog()
+    _catalog_cache.update(at=now, data=data)
+    return data
+
+
+async def catalog(session: AsyncSession, provider: ActivationProvider | None = None) -> dict:
+    """Sellable catalog for the buyer: real availability + final prices. No provider cost leaked.
+
+    Returns {enabled, configured, countries, items}. `configured` is False when markup is unset — the UI
+    then shows "not configured" instead of a fake price, and nothing is sellable.
+    """
+    enabled = await settings_service.get_bool(session, "sms_enabled")
+    m = await _markups(session)
+    raw = await provider_catalog(session, provider)
+    items, configured_any = [], False
+    for country, svcs in raw["prices"].items():
+        for service, info in svcs.items():
+            if info["count"] <= 0 or f"{country}:{service}" in m["disabled"]:
+                continue
+            try:
+                price = quote(info["cost"], country, service, m)
+            except PricingNotConfigured:
+                continue  # not priced -> not offered
+            configured_any = True
+            items.append({"country": country, "service": service, "price": float(price), "count": info["count"]})
+    return {
+        "enabled": enabled, "configured": configured_any,
+        "countries": raw["countries"], "services": raw["services"], "items": items,
+    }
+
+
+async def admin_catalog(session: AsyncSession, provider: ActivationProvider | None = None) -> dict:
+    """Catalog for admins: includes provider cost, resolved price, profit, and why a row is not sellable."""
+    m = await _markups(session)
+    raw = await provider_catalog(session, provider)
+    rows = []
+    for country, svcs in raw["prices"].items():
+        for service, info in svcs.items():
+            disabled = f"{country}:{service}" in m["disabled"]
+            try:
+                price = quote(info["cost"], country, service, m)
+                profit = float(price - money(info["cost"]))
+                priced = True
+            except PricingNotConfigured:
+                price, profit, priced = None, None, False
+            rows.append({"country": country, "service": service, "cost": float(info["cost"]),
+                         "count": info["count"], "price": float(price) if price is not None else None,
+                         "profit": profit, "priced": priced, "disabled": disabled})
+    return {"markups": {"global": m["global"], "country": m["country"], "service": m["service"],
+                        "min_profit": float(m["min_profit"])}, "rows": rows}

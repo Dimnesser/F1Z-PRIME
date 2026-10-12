@@ -46,7 +46,8 @@ def upgrade() -> None:
         # RESERVED|API_PENDING|WAITING|COMPLETED|CANCEL_REQUESTED|CANCELLED|TIMEOUT|FAILED|RECONCILIATION_REQUIRED
         sa.Column('status', sa.String(32), nullable=False, server_default='RESERVED'),
         sa.Column('code', sa.String(32), nullable=True),
-        sa.Column('cost', sa.Numeric(10, 2), nullable=False, server_default='0'),
+        sa.Column('cost', sa.Numeric(10, 2), nullable=False, server_default='0'),  # price paid by the buyer
+        sa.Column('provider_cost', sa.Numeric(10, 2), nullable=False, server_default='0'),  # our cost (for profit)
         sa.Column('refunded', sa.Boolean(), nullable=False, server_default='false'),  # refund-once guard
         sa.Column('events', sa.JSON(), nullable=False, server_default='[]'),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
