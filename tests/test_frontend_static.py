@@ -23,3 +23,26 @@ def test_effects_do_not_return_expression_values():
             if pattern.search(line):
                 offenders.append(f"{rel}:{n}: {line.strip()}")
     assert not offenders, "useEffect with expression body:\n" + "\n".join(offenders)
+
+
+def test_miniapp_has_no_heavy_animation_runtime():
+    """The Mini App animates with CSS only (budget phones, Telegram WebView); framer-motion added ~30 KB gzip."""
+    pkg = (ROOT / "frontend/package.json").read_text(encoding="utf-8")
+    assert "framer-motion" not in pkg
+    offenders = [
+        p.relative_to(ROOT).as_posix()
+        for p in (ROOT / "frontend/src").rglob("*.ts*")
+        if "framer-motion" in p.read_text(encoding="utf-8")
+    ]
+    assert not offenders, offenders
+
+
+def test_miniapp_colors_come_from_theme_tokens():
+    """Light/dark themes switch through CSS variables; hard-coded white overlays would break the light theme."""
+    pattern = re.compile(r"\b(?:bg|text|border|ring|divide)-white/")
+    offenders = []
+    for path in (ROOT / "frontend/src").rglob("*.tsx"):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if pattern.search(line):
+                offenders.append(f"{path.relative_to(ROOT).as_posix()}:{n}")
+    assert not offenders, "use the ov/line tokens instead of white/*:\n" + "\n".join(offenders)

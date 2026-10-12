@@ -156,3 +156,22 @@ implement the remaining stages listed above (see task list in this file).
 - Tests: `tests/test_legacy_catalog_preview.py` (in the pytest suite) + `tools/tests/test_legacy_reconcile.py`; full suite 127 passed.
 - NOT integrated: the uploaded legacy `bot.py`, `accounts.db`, `.session` files and receipts — those contain real
   Telegram account credentials and personal data and are deliberately excluded from the repo and the server.
+
+## Stage H — UI/UX redesign 2026 «Midnight Premium» (not deployed)
+- Base: fast-forward of this branch to `4bdd0d5` (head of `ccr-27c43927-xio4pi`); redesign commits on top.
+- Mini App: CSS-variable design tokens (palette #080B12 / #111624 / #171E2E, accent #756BFF, #34D5C5), light theme
+  that follows Telegram (Profile → Оформление: Авто / Тёмная / Светлая), component library in `components/ui.tsx`,
+  `Cards.tsx`, `Sheet.tsx` (BottomSheet + ConfirmDialog), `Toast.tsx`. New bottom nav Главная / Каталог / Заказы /
+  Баланс / Профиль (safe-area, hidden while the keyboard is open). New `/balance` screen. Redesigned Home, Catalog,
+  Product, SMS activations (purchase confirmation, live card with timer, cancel confirmation, history), Orders
+  (active / completed / cancelled / refunds), Order, Profile, Support, Ticket. framer-motion removed:
+  JS 133 → 103 KB gzip.
+- Admin: same palette and Onest typography, StatCard / StatusIndicator, grouped sidebar, desktop top bar with
+  breadcrumbs, grouped mobile «Ещё» sheet; dashboard with hero KPIs, «Состояние магазина» strip and SMS widget;
+  SMS page KPIs incl. cost/profit.
+- Bot: unified message style, confirmation screen before balance purchases (`cfm:` → existing `buy:`).
+- Verification: pytest 177 passed (local PostgreSQL 16); `npm run build` (tsc -b + vite) OK for both apps;
+  Playwright (Chromium, outside Telegram): SMS purchase → timer → cancel, product qty → checkout, top-up sheet,
+  bottom nav, order cancel dialog, theme switch, loading / error / empty states; no horizontal overflow at
+  320 / 360 / 375 / 414 / 430 px; admin pages at 1440 and 390 px without page errors.
+  Not checked: a real Telegram client WebView, real payments, the real SMS provider.
