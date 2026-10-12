@@ -280,3 +280,32 @@ async def test_sms_admin_summary_and_reconcile(client, admin_headers, user_heade
     assert {"by_status", "reconciliation_required", "profit"} <= s.keys()
     cat = (await client.get("/api/admin/sms/catalog", headers=admin_headers)).json()
     assert cat["rows"] and any(r["priced"] for r in cat["rows"])
+
+
+async def test_restore_stranded_activation(client, admin_headers, user_headers):
+    """A row charged but stuck (no activation_id) after a crash is reconciled, never silently re-bought."""
+    uid, chat = await _funded_user(client, admin_headers, user_headers)
+
+    class HangProvider(sms.MockActivationProvider):
+        async def get_number(self, service, country):
+            raise sms.ProviderTimeout("crash before resolve")
+
+        async def get_active_activations(self):
+            return []  # nothing to match -> safe manual reconciliation, no double buy
+
+    prov = HangProvider()
+    async with session_factory()() as s:
+        act = await sms.buy(s, uid, chat, service="tg", country="0", cost=Decimal("10"), provider=prov)
+        await s.commit()
+        aid = act.id
+        # simulate the row being stuck in API_PENDING with no provider id, created long ago
+        row = await s.get(SmsActivation, aid)
+        row.status = "API_PENDING"
+        row.activation_id = None
+        row.created_at = sms.utcnow() - sms.timedelta(minutes=5)
+        await s.commit()
+    async with session_factory()() as s:
+        n = await sms.restore_pending(s, provider=prov, grace_seconds=120)
+        await s.commit()
+        assert n == 1
+        assert (await s.get(SmsActivation, aid)).status == "RECONCILIATION_REQUIRED"

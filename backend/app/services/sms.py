@@ -363,6 +363,34 @@ async def poll_one(session: AsyncSession, activation_id: int, owner: str, genera
         await _refund_once(session, act, "отменено провайдером")
 
 
+RESTORE_GRACE_SECONDS = 120
+
+
+async def restore_pending(session: AsyncSession, *, provider: ActivationProvider | None = None,
+                          grace_seconds: int = RESTORE_GRACE_SECONDS) -> int:
+    """Recover activations stranded by a crash between charging and resolving get_number.
+
+    A RESERVED/API_PENDING row with no provider activation_id, older than the grace window, is reconciled
+    against the provider's active list — bound only on an unambiguous match, otherwise moved to
+    RECONCILIATION_REQUIRED. It is never silently re-bought (unknown result ≠ success).
+    """
+    prov = provider or get_provider()
+    cutoff = utcnow() - timedelta(seconds=grace_seconds)
+    rows = (
+        await session.scalars(
+            select(SmsActivation)
+            .where(SmsActivation.status.in_(("RESERVED", "API_PENDING")),
+                   SmsActivation.activation_id.is_(None), SmsActivation.created_at < cutoff)
+            .order_by(SmsActivation.id).limit(20).with_for_update(skip_locked=True)
+        )
+    ).all()
+    for act in rows:
+        log.warning("restoring stranded SMS activation %s (status=%s)", act.id, act.status)
+        _log(act, "restore_pending", prev=act.status)
+        await _reconcile(session, act, prov)
+    return len(rows)
+
+
 async def cancel(session: AsyncSession, activation_id: int, *, actor: str = "user",
                  provider: ActivationProvider | None = None) -> SmsActivation:
     """Buyer/operator cancels a waiting activation; refunds once."""

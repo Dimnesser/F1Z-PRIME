@@ -299,6 +299,14 @@ async def task_sms_outbox() -> str:
     return f"delivered {n}"
 
 
+async def task_sms_restore() -> str:
+    """Recover SMS activations stranded by a crash (charged but never resolved) via safe reconciliation."""
+    async with session_factory()() as session:
+        n = await sms.restore_pending(session)
+        await session.commit()
+    return f"restored {n}"
+
+
 async def task_backup() -> str:
     async with session_factory()() as session:
         if not await settings_service.get_bool(session, "auto_backup"):
@@ -365,6 +373,7 @@ PERIODIC: list[tuple[str, int, Callable[[], Awaitable[str]]]] = [
     ("low_stock", 600, task_low_stock),
     ("sms_poll", 15, task_sms_poll),
     ("sms_outbox", 10, task_sms_outbox),
+    ("sms_restore", 120, task_sms_restore),
     ("notification_outbox", 60, task_outbox),
     ("backup", 1800, task_backup),
     ("cleanup", 86400, task_cleanup),
