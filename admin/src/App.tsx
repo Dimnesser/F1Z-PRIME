@@ -17,6 +17,7 @@ const Products = lazy(() => import('./pages/Products'))
 const Premium = lazy(() => import('./pages/Premium'))
 const Countries = lazy(() => import('./pages/Countries'))
 const Phones = lazy(() => import('./pages/Phones'))
+const SmsActivations = lazy(() => import('./pages/SmsActivations'))
 const Finance = lazy(() => import('./pages/Finance'))
 const Support = lazy(() => import('./pages/Support'))
 const Automation = lazy(() => import('./pages/Automation'))
@@ -119,6 +120,7 @@ export default function App() {
             <Route path="/inbox" element={<Inbox onChange={refreshCounters} />} />
             {allow('products.view') && <Route path="/products" element={<Products />} />}
             {allow('products.view') && <Route path="/phones" element={<Phones />} />}
+            {allow('orders.view') && <Route path="/sms" element={<SmsActivations />} />}
             {allow('promo.manage') && <Route path="/promo" element={<Promo />} />}
             {allow('products.edit') && <Route path="/premium" element={<Premium />} />}
             {allow('products.edit') && <Route path="/countries" element={<Countries />} />}
