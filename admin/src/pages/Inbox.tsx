@@ -62,7 +62,7 @@ export default function Inbox({ onChange }: { onChange: () => void }) {
       ) : !data?.items.length ? (
         <div className="card"><Empty icon={Bell} title={filter === 'unread' ? 'Нет непрочитанных' : 'Уведомлений пока нет'} text="Здесь появятся назначения обращений, запросы на одобрение, срабатывания правил и изменения прав." /></div>
       ) : (
-        <div className="card divide-y divide-white/[0.05] overflow-hidden">
+        <div className="card divide-y divide-line/60 overflow-hidden">
           {data.items.map((n) => {
             const k = KIND[n.kind] ?? { icon: Bell, cls: 'bg-white/[0.07] text-muted' }
             const open = () => { if (!n.read) void markRead({ ids: [n.id] }) }

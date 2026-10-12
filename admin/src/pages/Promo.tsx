@@ -366,8 +366,8 @@ function ProductPicker({ products, canView, value, onChange }: { products: Produ
       ) : !products ? (
         <Skeleton className="h-24" />
       ) : (
-        <div className="rounded-xl border border-white/[0.06]">
-          <div className="border-b border-white/[0.06] p-2"><SearchInput value={q} onChange={setQ} placeholder="Найти товар" /></div>
+        <div className="rounded-xl border border-line/70">
+          <div className="border-b border-line/70 p-2"><SearchInput value={q} onChange={setQ} placeholder="Найти товар" /></div>
           <div className="max-h-52 overflow-y-auto overscroll-contain p-1">
             {list.length === 0 && <div className="px-3 py-4 text-center text-sm text-muted">Ничего не найдено</div>}
             {list.map((p) => (

@@ -109,7 +109,7 @@ export default function Rules() {
       <PageHead title="Правила автоматизации" subtitle="КОГДА произошло событие → ЕСЛИ выполнены условия → ТОГДА выполнить действия">
         {canEdit && <Btn className="w-full sm:w-auto" disabled={!catalog} onClick={openNew}><Plus className="h-4 w-4" /> Правило</Btn>}
       </PageHead>
-      <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-muted">
+      <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-line/70 bg-white/[0.03] px-4 py-3 text-sm text-muted">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
         <span>Правила не проводят денежные операции и не выдают товары — оплата, возвраты и выдача всегда проходят обычные проверки сервера. Действия правил не запускают другие правила.</span>
       </div>

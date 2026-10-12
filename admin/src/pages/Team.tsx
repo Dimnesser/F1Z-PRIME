@@ -446,7 +446,7 @@ function AccountSheet({ account: a, roles, catalog, onClose, onSaved, onDeleted,
               {catalog.groups.map((g) => (
                 <div key={g.name} className="rounded-xl bg-white/[0.03] p-3">
                   <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">{g.name}</div>
-                  <div className="divide-y divide-white/[0.05]">
+                  <div className="divide-y divide-line/60">
                     {g.permissions.map((p) => {
                       const st = stateOf(p.code)
                       const eff = effectiveLocal(p.code)

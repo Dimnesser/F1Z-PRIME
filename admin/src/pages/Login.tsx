@@ -30,7 +30,7 @@ export default function Login({ onLogin }: { onLogin: (me: Me) => void }) {
       <form onSubmit={submit} className="fade-in w-full max-w-sm">
         <div className="mb-8 text-center">
           <img src="/admin/brand.jpg" alt="F1Z PRIME" className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-glow ring-1 ring-white/10" />
-          <h1 className="mt-5 font-display text-2xl font-bold">F1Z <span className="text-primary-soft">PRIME</span></h1>
+          <h1 className="mt-5 font-brand text-2xl font-bold">F1Z <span className="text-primary-soft">PRIME</span></h1>
           <p className="mt-1 text-sm text-muted">Панель управления магазином</p>
         </div>
         <div className="card space-y-4 p-6">

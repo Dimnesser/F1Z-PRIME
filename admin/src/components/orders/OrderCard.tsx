@@ -178,7 +178,7 @@ export function OrderDetail({ id, onClose, onChanged }: { id: number; onClose: (
           </div>
 
           {/* fulfillment */}
-          <section className="rounded-2xl border border-white/[0.06] p-3.5">
+          <section className="rounded-2xl border border-line/70 p-3.5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-semibold"><PackageCheck className="h-4 w-4 text-primary-soft" /> Выдача</div>
               <Badge tone={fs === 'delivered' ? 'green' : fs === 'failed' ? 'red' : fs === 'manual' || fs === 'review' ? 'amber' : 'gray'}>

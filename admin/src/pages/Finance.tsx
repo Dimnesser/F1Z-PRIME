@@ -102,7 +102,7 @@ function Overview({ range }: { range: { from: string; to: string } }) {
       </div>
       <Card title="Ошибки платежей (отклонённые)" pad={false}>
         {d.failed_payments.length === 0 ? <div className="px-5 pb-6 text-sm text-muted">За период отклонённых платежей нет.</div> : (
-          <div className="divide-y divide-white/[0.05]">
+          <div className="divide-y divide-line/60">
             {d.failed_payments.map((p) => (
               <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm sm:px-5">
                 <div className="min-w-0"><div className="truncate font-semibold">#{p.id} · {p.user} · {METHOD[p.method] ?? p.method}</div><div className="truncate text-xs text-muted">{dt(p.created_at)}{p.comment ? ` · ${p.comment}` : ''}</div></div>

@@ -69,7 +69,7 @@ export function SettingsSection({ title, description, fields, rows, onSaved, rea
     <Card title={title}>
       {description && <p className="-mt-2 mb-4 text-sm text-muted">{description}</p>}
       {boolFields.length > 0 && (
-        <div className={clsx('divide-y divide-white/[0.05] rounded-xl bg-white/[0.02]', textFields.length && 'mb-4')}>
+        <div className={clsx('divide-y divide-line/60 rounded-xl bg-white/[0.02]', textFields.length && 'mb-4')}>
           {boolFields.map((f) => (
             <div key={f.key} className="flex items-center justify-between gap-4 px-4 py-3.5">
               <div className="min-w-0">

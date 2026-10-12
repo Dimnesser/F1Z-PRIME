@@ -128,7 +128,7 @@ export function ProductFields({ form, setForm, initial, categories, countries, c
         <input className="input tabular" inputMode="numeric" disabled={!can.price} value={form.price_stars} placeholder="—" onChange={(e) => set('price_stars', e.target.value.replace(/\D/g, ''))} />
       </Field>
       <label className="flex items-start gap-3 rounded-xl bg-white/[0.03] px-4 py-3 sm:col-span-2">
-        <input type="checkbox" className="mt-1 h-4 w-4 accent-[#8B5CF6]" disabled={!can.price} checked={form.stars_enabled} onChange={(e) => set('stars_enabled', e.target.checked)} />
+        <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" disabled={!can.price} checked={form.stars_enabled} onChange={(e) => set('stars_enabled', e.target.checked)} />
         <span className="text-sm"><span className="font-semibold">Разрешить оплату Telegram Stars для этого товара</span>
           <span className="mt-0.5 block text-xs text-muted">Выключайте для товаров, которые нельзя продавать за Stars по правилам Telegram.</span></span>
       </label>
@@ -140,7 +140,7 @@ export function ProductFields({ form, setForm, initial, categories, countries, c
           {(Object.keys(FULFILLMENT) as FulfillmentMode[]).map((m) => (
             <button key={m} type="button" onClick={() => set('fulfillment_mode', m)}
               className={clsx('rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed',
-                form.fulfillment_mode === m ? 'border-primary/50 bg-primary/10' : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04]')}>
+                form.fulfillment_mode === m ? 'border-primary/50 bg-primary/10' : 'border-line/70 bg-white/[0.02] hover:bg-white/[0.04]')}>
               <div className="text-sm font-semibold">{FULFILLMENT[m].label}</div>
               <div className="mt-0.5 text-xs leading-snug text-muted">{FULFILLMENT[m].hint}</div>
             </button>
@@ -224,7 +224,7 @@ export function ProductFields({ form, setForm, initial, categories, countries, c
 
 function Section({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="-mb-1 mt-1 border-t border-white/[0.06] pt-4 sm:col-span-2">
+    <div className="-mb-1 mt-1 border-t border-line/70 pt-4 sm:col-span-2">
       <div className="text-[11px] font-bold uppercase tracking-wider text-muted">{title}</div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </div>
@@ -254,7 +254,7 @@ function TagsInput({ tags, onChange }: { tags: string[]; onChange: (t: string[])
   return (
     <div className="min-w-0 sm:col-span-2">
       <span className="label">Теги <span className="font-normal">· {tags.length}/{MAX_TAGS}</span></span>
-      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-line/70 bg-white/[0.02] p-2">
         {tags.map((t) => (
           <span key={t} className="inline-flex items-center gap-1 rounded-full bg-primary/15 py-0.5 pl-2.5 pr-1 text-xs font-semibold text-primary-soft">
             {t}
