@@ -43,6 +43,14 @@ worker с durable-очередью (retry/backoff/dead-letter/recover_stale), в
   `monitor.py`/compose healthcheck).
 - **ЭТАП 15 (документация)**: обновить `README.md`, `DEPLOYMENT.md`, `ADMIN_GUIDE.md`, `TEST_REPORT.md`.
 
+## SMS-активации (resilient engine готов, 2026-10-12)
+Коммиты 0009…`22160f6`. Движок виртуальных номеров: миграция 0009 (`sms_activations` + `delivery_outbox`),
+`services/sms.py` (провайдер mock + sms-activate.org, lease/generation, reconciliation, outbox
+UNKNOWN-policy, refund-once), worker-таски `task_sms_poll`/`task_sms_outbox`, 7 тестов. Сюита **159 passed**.
+НЕ развёрнуто на vps4 (ждёт подтверждения). Для пользовательского запуска нужны: разделы 2+ обрезанного
+ТЗ (бот/Mini App UX, эндпоинты, матрица тестов), каталог сервисов/стран + цены, реальный
+`SMS_ACTIVATE_API_KEY` в `.env`. UI/эндпоинт-слой поверх `services/sms.py` ещё не написан.
+
 ## Следующее конкретное действие
 Крупные инварианты и функции закрыты (см. `PROJECT_AUDIT.md`, `TEST_REPORT.md`). Остаётся опционально:
 1. ЭТАП 3 — косметическая полировка Mini App (оценить реальные пробелы, не переписывать работающее).
