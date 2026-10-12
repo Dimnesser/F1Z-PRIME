@@ -41,11 +41,13 @@ log = logging.getLogger("f1z.bot")
 router = Router(name="main")
 
 WELCOME = (
-    "🚀 <b>Добро пожаловать в F1Z PRIME!</b>\n\n"
-    "Премиальный магазин цифровых товаров.\n\n"
-    "🌍 Номера 8 стран · 💎 Красивые номера · ⚡ Быстрая выдача\n"
-    "🔒 Оплата Telegram Stars и проверенные платежи\n\n"
-    "Выберите раздел 👇"
+    "<b>Добро пожаловать в F1Z PRIME</b>\n"
+    "Маркетплейс цифровых товаров\n\n"
+    "🌍 Номера разных стран\n"
+    "📱 Виртуальные номера для SMS-кода\n"
+    "💎 Красивые номера\n\n"
+    "Оплата балансом или Telegram Stars, выдача — прямо в заказе.\n"
+    "Удобнее всего — в приложении магазина 👇"
 )
 
 
@@ -105,8 +107,9 @@ async def show_menu(event: Message | CallbackQuery, state: FSMContext) -> None:
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(
-        "ℹ️ <b>Команды</b>\n/start — главное меню\n/shop, /catalog — каталог\n/premium — красивые номера\n"
-        "/profile — профиль\n/balance — баланс\n/orders — мои покупки\n/support — поддержка",
+        "<b>Команды</b>\n\n"
+        "/start — главное меню\n/shop, /catalog — каталог\n/sms — виртуальный номер\n/premium — красивые номера\n"
+        "/profile, /balance — профиль и баланс\n/orders — мои покупки\n/support — поддержка",
         reply_markup=rows(menu_row()),
     )
 
@@ -127,15 +130,15 @@ async def show_catalog(event: Message | CallbackQuery) -> None:
             )
         ).all()
     if not products:
-        await _edit_or_send(event, "🛍 Каталог пока пуст. Загляните позже!", rows(menu_row()))
+        await _edit_or_send(event, "🛍 <b>Каталог</b>\n\nСейчас здесь пусто — загляните чуть позже.", rows(menu_row()))
         return
-    lines = ["🛍 <b>Каталог F1Z PRIME</b>\n"]
+    lines = ["🛍 <b>Каталог</b>", "Выберите товар — откроется карточка с ценой и оплатой.\n"]
     buttons = []
     for p in products:
         flag = p.country.flag if p.country else "📦"
         stock = f"{p.stock} шт." if p.stock else "нет в наличии"
         code = f" ({p.country.dial_code})" if p.country else ""
-        lines.append(f"{flag} <b>{esc(p.title)}</b>{esc(code)} — {fmt_money(p.price)} грн · {stock}")
+        lines.append(f"{flag} <b>{esc(p.title)}</b>{esc(code)}\n      {fmt_money(p.price)} грн · {stock}")
         buttons.append(
             [InlineKeyboardButton(text=f"{flag} {p.title} — {fmt_money(p.price)} грн", callback_data=f"product:{p.id}")]
         )
@@ -152,15 +155,17 @@ async def show_product(cb: CallbackQuery) -> None:
     if p is None or p.status != ProductStatus.active:
         await cb.answer("Товар недоступен", show_alert=True)
         return
-    country = f"{p.country.flag} {esc(p.country.name)} ({esc(p.country.dial_code)})\n" if p.country else ""
+    country = f"{p.country.flag} {esc(p.country.name)} · {esc(p.country.dial_code)}\n" if p.country else ""
+    stock = f"{p.stock} шт." if p.stock > 0 else "нет в наличии"
     text = (
-        f"<b>{esc(p.title)}</b>\n{country}\n{esc(p.description)}\n\n"
-        f"💰 Цена: <b>{fmt_money(p.price)} грн</b>\n📦 В наличии: <b>{p.stock}</b>"
+        f"<b>{esc(p.title)}</b>\n{country}\n"
+        f"Цена: <b>{fmt_money(p.price)} грн</b>\nВ наличии: <b>{stock}</b>"
+        + (f"\n\n{esc(p.description)}" if p.description else "")
     )
     buy = []
     if p.stock > 0:
         buy = [
-            InlineKeyboardButton(text="💳 Купить с баланса", callback_data=f"buy:p:{p.id}:balance"),
+            InlineKeyboardButton(text="💳 Купить с баланса", callback_data=f"cfm:p:{p.id}"),
             InlineKeyboardButton(text="⭐ Telegram Stars", callback_data=f"buy:p:{p.id}:stars"),
         ]
     await _edit_or_send(
@@ -184,9 +189,9 @@ async def show_premium(event: Message | CallbackQuery) -> None:
             )
         ).all()
     if not items:
-        await _edit_or_send(event, "💎 Красивых номеров сейчас нет в наличии.", rows(menu_row()))
+        await _edit_or_send(event, "💎 <b>Красивые номера</b>\n\nСейчас свободных номеров нет — новые появятся скоро.", rows(menu_row()))
         return
-    lines = ["💎 <b>Красивые номера</b>\n"]
+    lines = ["💎 <b>Красивые номера</b>", "Часть цифр скрыта — полный номер откроется после оплаты.\n"]
     buttons = []
     for n in items:
         flag = n.country.flag if n.country else "🌐"
@@ -209,15 +214,16 @@ async def show_premium_number(cb: CallbackQuery) -> None:
         return
     flag = n.country.flag if n.country else "🌐"
     text = (
-        f"💎 <b>{esc(n.title)}</b>\n\n{flag} <code>{esc(n.display_mask)}</code>\n"
-        f"💰 <b>{fmt_money(n.price)} грн</b>\n📦 В наличии\n\n{esc(n.description)}"
+        f"💎 <b>{esc(n.title)}</b>\n\n{flag} <code>{esc(n.display_mask)}</code>\n\n"
+        f"Цена: <b>{fmt_money(n.price)} грн</b>\nСтатус: в наличии"
+        + (f"\n\n{esc(n.description)}" if n.description else "")
     )
     await _edit_or_send(
         cb,
         text,
         rows(
             [
-                InlineKeyboardButton(text="💳 Купить с баланса", callback_data=f"buy:n:{n.id}:balance"),
+                InlineKeyboardButton(text="💳 Купить с баланса", callback_data=f"cfm:n:{n.id}"),
                 InlineKeyboardButton(text="⭐ Telegram Stars", callback_data=f"buy:n:{n.id}:stars"),
             ],
             back("premium"),
@@ -227,6 +233,40 @@ async def show_premium_number(cb: CallbackQuery) -> None:
 
 
 # --------------------------------------------------------------------- buy
+
+
+@router.callback_query(F.data.startswith("cfm:"))
+async def confirm_balance_purchase(cb: CallbackQuery) -> None:
+    """Balance purchases get an explicit confirmation step; the actual purchase stays in `buy:`."""
+    _, kind, raw_id = cb.data.split(":")  # type: ignore[union-attr]
+    item_id = int(raw_id)
+    async with session_factory()() as session:
+        if kind == "p":
+            p = await session.get(Product, item_id)
+            ok = p is not None and p.status == ProductStatus.active and p.stock > 0
+            title, price, back_to = (p.title, p.price, f"product:{item_id}") if p else ("", 0, "catalog")
+        else:
+            n = await session.get(PremiumNumber, item_id)
+            ok = n is not None and n.status == PremiumStatus.available
+            title, price, back_to = (n.display_mask, n.price, f"pn:{item_id}") if n else ("", 0, "premium")
+        user = await session.scalar(select(User).where(User.telegram_id == cb.from_user.id)) if cb.from_user else None
+    if not ok:
+        await cb.answer("Товар уже недоступен", show_alert=True)
+        return
+    balance = user.balance if user else 0
+    enough = balance >= price
+    text = (
+        "💳 <b>Подтверждение покупки</b>\n\n"
+        f"{esc(title)}\n"
+        f"Спишется с баланса: <b>{fmt_money(price)} грн</b>\n"
+        f"Ваш баланс: {fmt_money(balance)} грн\n\n"
+        + ("Товар будет закреплён за вами, данные появятся в заказе." if enough else "⚠️ Недостаточно средств — пополните баланс в профиле.")
+    )
+    action = (
+        [InlineKeyboardButton(text=f"✅ Подтвердить · {fmt_money(price)} грн", callback_data=f"buy:{kind}:{item_id}:balance")]
+        if enough else [InlineKeyboardButton(text="➕ Пополнить баланс", callback_data="topup")]
+    )
+    await _edit_or_send(cb, text, rows(action, back(back_to, "✖️ Отмена")))
 
 
 @router.callback_query(F.data.startswith("buy:"))
@@ -260,8 +300,8 @@ async def buy(cb: CallbackQuery) -> None:
         await _edit_or_send(
             cb,
             f"🧾 <b>Заказ #{order.id}</b>\n{esc(order.item_title)}\n\n"
-            f"Сумма: <b>{fmt_money(order.total)} грн</b> = ⭐ <b>{result.payment.stars_amount}</b>\n"
-            "Нажмите кнопку ниже, чтобы оплатить. Заказ резервируется на 30 минут.",
+            f"К оплате: <b>{fmt_money(order.total)} грн</b> = ⭐ <b>{result.payment.stars_amount}</b>\n\n"
+            "Товар зарезервирован на 30 минут. Нажмите кнопку ниже, чтобы оплатить в Telegram.",
             rows(
                 [InlineKeyboardButton(text=f"⭐ Оплатить {result.payment.stars_amount} Stars", url=result.invoice_link)],
                 [InlineKeyboardButton(text="📦 Мои покупки", callback_data="orders")],
@@ -281,9 +321,9 @@ def _orders_btn() -> InlineKeyboardButton:
 
 
 def _order_text(order: Order, paid_now: bool = False) -> str:
-    head = "✅ <b>Оплата прошла успешно!</b>\n\n" if paid_now else ""
+    head = "✅ <b>Оплата прошла</b>\n\n" if paid_now else ""
     text = (
-        f"{head}🧾 <b>Заказ {order.public_id or f'#{order.id}'}</b>\n{esc(order.item_title)} × {order.quantity}\n"
+        f"{head}🧾 <b>Заказ {order.public_id or f'#{order.id}'}</b>\n{esc(order.item_title)} × {order.quantity}\n\n"
         f"Сумма: <b>{fmt_money(order.total)} грн</b>\n"
         f"Статус: <b>{order_service.STATUS_LABELS[order.status]}</b>\n"
         f"Дата: {order.created_at:%d.%m.%Y %H:%M}"
@@ -311,12 +351,12 @@ async def show_profile(event: Message | CallbackQuery) -> None:
     user = await _get_user(event.from_user)
     text = (
         "👤 <b>Профиль</b>\n\n"
-        f"🆔 Telegram ID: <code>{user.telegram_id}</code>\n"
-        f"👋 Имя: {esc(user.first_name or '-')}\n"
-        f"🔗 Username: @{esc(user.username or '-')}\n"
-        f"📅 С нами с: {user.created_at:%d.%m.%Y}\n\n"
-        f"💳 Баланс: <b>{fmt_money(user.balance)} грн</b>\n"
-        f"🛒 Покупок: <b>{user.orders_count}</b> на {fmt_money(user.total_spent)} грн"
+        f"Баланс: <b>{fmt_money(user.balance)} грн</b>\n"
+        f"Покупок: <b>{user.orders_count}</b> на {fmt_money(user.total_spent)} грн\n\n"
+        f"Имя: {esc(user.first_name or '—')}\n"
+        f"Username: {'@' + esc(user.username) if user.username else '—'}\n"
+        f"Telegram ID: <code>{user.telegram_id}</code>\n"
+        f"С нами с {user.created_at:%d.%m.%Y}"
     )
     await _edit_or_send(
         event,
@@ -334,7 +374,7 @@ async def topup_menu(cb: CallbackQuery) -> None:
     amounts = [100, 250, 500, 1000]
     await _edit_or_send(
         cb,
-        "➕ <b>Пополнение баланса через Telegram Stars</b>\n\nВыберите сумму:",
+        "➕ <b>Пополнение баланса</b>\n\nОплата через Telegram Stars. Выберите сумму:",
         rows(
             [InlineKeyboardButton(text=f"{a} грн", callback_data=f"topup:{a}") for a in amounts[:2]],
             [InlineKeyboardButton(text=f"{a} грн", callback_data=f"topup:{a}") for a in amounts[2:]],
@@ -360,7 +400,7 @@ async def topup_amount(cb: CallbackQuery) -> None:
             return
     await _edit_or_send(
         cb,
-        f"🧾 Пополнение на <b>{amount} грн</b> = ⭐ <b>{result.payment.stars_amount}</b>",
+        f"🧾 <b>Пополнение на {amount} грн</b>\n\nК оплате: ⭐ <b>{result.payment.stars_amount}</b>\nБаланс пополнится сразу после оплаты.",
         rows(
             [InlineKeyboardButton(text=f"⭐ Оплатить {result.payment.stars_amount} Stars", url=result.invoice_link or "")],
             back("profile"),
@@ -383,14 +423,14 @@ async def show_orders(event: Message | CallbackQuery) -> None:
         ).unique().all()
     if not orders:
         await _edit_or_send(
-            event, "📦 У вас пока нет покупок.", rows([InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog")], menu_row())
+            event, "📦 <b>Мои покупки</b>\n\nУ вас пока нет покупок — загляните в каталог.", rows([InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog")], menu_row())
         )
         return
-    lines = ["📦 <b>Мои покупки</b>\n"]
+    lines = ["📦 <b>Мои покупки</b>", "Последние заказы — нажмите, чтобы открыть детали.\n"]
     buttons = []
     for o in orders:
         status = order_service.STATUS_LABELS[o.status]
-        lines.append(f"#{o.id} · {esc(o.item_title)} · {fmt_money(o.total)} грн · <i>{status}</i>")
+        lines.append(f"<b>#{o.id}</b> {esc(o.item_title)}\n      {fmt_money(o.total)} грн · <i>{status}</i>")
         buttons.append([InlineKeyboardButton(text=f"#{o.id} · {status}", callback_data=f"order:{o.id}")])
     await _edit_or_send(event, "\n".join(lines), rows(*buttons, menu_row()))
 
@@ -423,7 +463,7 @@ async def show_support(event: Message | CallbackQuery) -> None:
             )
         ).unique().all()
     labels = {TicketStatus.open: "🟡 открыто", TicketStatus.answered: "🟢 есть ответ", TicketStatus.closed: "⚪ закрыто"}
-    lines = ["🆘 <b>Поддержка F1Z PRIME</b>\n", "Опишите проблему — администратор ответит прямо в этот чат."]
+    lines = ["🆘 <b>Поддержка F1Z PRIME</b>\n", "Опишите вопрос одним сообщением — администратор ответит прямо в этот чат."]
     if tickets:
         lines.append("\n<b>Ваши обращения:</b>")
         lines += [f"#{t.id} {esc(t.subject)} — {labels[t.status]}" for t in tickets]
@@ -442,7 +482,7 @@ async def show_support(event: Message | CallbackQuery) -> None:
 async def ticket_new(cb: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(SupportForm.waiting_text)
     await _edit_or_send(
-        cb, "✍️ Напишите ваше сообщение одним текстом (до 4000 символов).", rows(back("support", "✖️ Отмена"))
+        cb, "✍️ <b>Новое обращение</b>\n\nНапишите сообщение одним текстом (до 4000 символов). Номер заказа ускорит ответ.", rows(back("support", "✖️ Отмена"))
     )
 
 
@@ -450,7 +490,7 @@ async def ticket_new(cb: CallbackQuery, state: FSMContext) -> None:
 async def ticket_text(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
     if len(text) < 2:
-        await message.answer("Сообщение слишком короткое, попробуйте ещё раз.")
+        await message.answer("Сообщение слишком короткое — опишите вопрос чуть подробнее.")
         return
     await state.clear()
     user = await _get_user(message.from_user)  # type: ignore[arg-type]
@@ -470,7 +510,7 @@ async def ticket_text(message: Message, state: FSMContext) -> None:
         await session.commit()
         ticket_id = ticket.id
     await message.answer(
-        f"✅ Обращение #{ticket_id} создано. Мы ответим в ближайшее время!", reply_markup=rows(menu_row())
+        f"✅ Обращение #{ticket_id} создано\n\nМы ответим в этот чат в ближайшее время.", reply_markup=rows(menu_row())
     )
     await tg_api.notify_admins(f"🆘 Новое обращение #{ticket_id} (бот) от {user.telegram_id}:\n{esc(text[:500])}", kind="tickets")
 
@@ -523,7 +563,7 @@ async def successful_payment(message: Message) -> None:
 
 @router.message()
 async def fallback(message: Message) -> None:
-    await message.answer("Не понял команду 🤔 Воспользуйтесь меню:", reply_markup=main_menu())
+    await message.answer("Не удалось распознать команду. Выберите раздел в меню 👇", reply_markup=main_menu())
 
 
 # --------------------------------------------------------------- SMS-activations (buy a virtual number)
@@ -624,8 +664,9 @@ async def sms_confirm(event: CallbackQuery) -> None:
     if item is None:
         await _edit_or_send(event, "Эта позиция больше недоступна.", rows([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"sms:c:{country}")], menu_row()))
         return
-    text = (f"📱 <b>Покупка номера</b>\n\nСтрана: {esc(country)}\nСервис: {esc(service)}\n"
-            f"Цена: <b>{fmt_money(item['price'])} грн</b>\n\nНомер получит один SMS-код. Подтвердить?")
+    text = (f"📱 <b>Подтверждение покупки</b>\n\nСтрана: {esc(country)}\nСервис: {esc(service)}\n"
+            f"Спишется с баланса: <b>{fmt_money(item['price'])} грн</b>\n\n"
+            "Номер принимает один SMS-код. Если код не придёт, активацию можно отменить. Подтвердить?")
     await _edit_or_send(event, text, rows(
         [InlineKeyboardButton(text="✅ Купить", callback_data=f"sms:go:{country}:{service}")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"sms:c:{country}")], menu_row()))
@@ -665,7 +706,7 @@ async def sms_buy(event: CallbackQuery) -> None:
             await session.commit()
         except ServiceError as exc:
             await session.rollback()
-            msg = "💳 Недостаточно средств на балансе. Пополните баланс." if exc.code == "insufficient_funds" else f"⚠️ {exc.message}"
+            msg = "💳 Недостаточно средств на балансе.\nПополните баланс в профиле и повторите покупку." if exc.code == "insufficient_funds" else f"⚠️ {exc.message}"
             await _edit_or_send(event, msg, rows(menu_row()))
             return
         await _edit_or_send(event, _sms_card(act), _sms_status_kb(act))
