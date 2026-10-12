@@ -274,6 +274,10 @@ async def _release_items(session: AsyncSession, order: Order, reason: str = "rel
                 product.stock += released
                 if released:
                     inventory.record(session, product, released, reason, order_id=order.id)
+            elif product.uses_phone_inventory:
+                # phones.release_for_order already resynced product.stock to the AVAILABLE row count;
+                # a counter bump here would double-count and inflate the derived stock.
+                pass
             else:
                 product.stock += order.quantity
                 inventory.record(session, product, order.quantity, reason, order_id=order.id)
@@ -374,8 +378,13 @@ async def refund_to_balance(session: AsyncSession, order: Order, *, actor: str, 
     """Full refund to the store balance (confirmed internally, so it completes immediately). Order row locked."""
     from app.models import Refund
 
+    # Same guard as refunds.create: a manual/requested refund in flight must also block a second payout,
+    # otherwise setting the order status to "refunded" would credit the balance on top of a manual transfer.
     already = await session.scalar(
-        select(func.count(Refund.id)).where(Refund.order_id == order.id, Refund.status.in_(["succeeded", "processing"]))
+        select(func.count(Refund.id)).where(
+            Refund.order_id == order.id,
+            Refund.status.in_(["succeeded", "processing", "manual_pending", "requested"]),
+        )
     )
     if already:
         raise ServiceError("По заказу уже выполнен или выполняется возврат", 409, "already_refunded")

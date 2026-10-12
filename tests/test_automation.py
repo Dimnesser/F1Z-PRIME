@@ -404,3 +404,20 @@ async def test_automation_center_and_timeline(client, admin_headers, user_header
     await run_jobs()
     async with session_factory()() as s:
         assert (await s.scalar(select(Job).where(Job.dedupe_key == "dead-1"))).status == "done"
+
+
+# 15b. regression: a manual refund in flight blocks a second payout via the status-change path
+async def test_status_refund_blocked_when_manual_refund_pending(client, admin_headers, user_headers):
+    pid = next(p["id"] for p in (await client.get("/api/products")).json() if p["price"] == 60)
+    order = (await client.post("/api/orders", json={"product_id": pid, "idempotency_key": "dblref-01"}, headers=user_headers)).json()
+    pay = (await client.post(f"/api/orders/{order['id']}/pay", json={"method": "manual"}, headers=user_headers)).json()["payment"]
+    await client.post(f"/api/payments/{pay['id']}/submit", json={"comment": "карта"}, headers=user_headers)
+    assert (await client.post(f"/api/admin/payments/{pay['id']}/confirm", json={}, headers=admin_headers)).status_code == 200
+    # operator opens a manual (bank-transfer) refund -> status manual_pending, order still not refunded
+    r = await client.post(f"/api/admin/orders/{order['id']}/refund", json={"method": "manual", "reason": "брак"}, headers=admin_headers)
+    assert r.json()["status"] == "manual_pending", r.text
+    bal_before = (await client.get("/api/me", headers=user_headers)).json()["balance"]
+    # setting the order status to "refunded" must NOT credit the balance on top of the manual transfer
+    resp = await client.post(f"/api/admin/orders/{order['id']}/status", json={"status": "refunded"}, headers=admin_headers)
+    assert resp.status_code == 409, resp.text  # already_refunded guard now covers manual_pending/requested
+    assert (await client.get("/api/me", headers=user_headers)).json()["balance"] == bal_before  # no double payout

@@ -250,3 +250,19 @@ async def test_phone_stars_webhook_replay_delivers_one_number(client, admin_head
     async with session_factory()() as s:
         assert await s.scalar(select(func.count()).select_from(PhoneInventory).where(
             PhoneInventory.status == "SOLD", PhoneInventory.sold_order_id == order["id"])) == 1
+
+
+async def test_cancel_does_not_inflate_phone_stock(client, admin_headers, user_headers):
+    # regression: _release_items must not add order.quantity on top of the derived AVAILABLE recount
+    await client.post("/api/admin/phones/bulk", json={"text": "+380671234901\n+380671234902"}, headers=admin_headers)  # UA, 2
+    ua = await _numbers_product(client, admin_headers, "UA")
+    assert ua["stock"] == 2
+    for key in ("ph-infl-01", "ph-infl-02", "ph-infl-03"):  # repeat reserve→cancel cycles; stock must stay 2
+        order = (await client.post("/api/orders", json={"product_id": ua["product_id"], "idempotency_key": key},
+                                   headers=user_headers)).json()
+        await client.post(f"/api/orders/{order['id']}/cancel", headers=user_headers)
+    fresh = await _numbers_product(client, admin_headers, "UA")
+    assert fresh["stock"] == 2  # not 5
+    async with session_factory()() as s:
+        assert await s.scalar(select(func.count()).select_from(PhoneInventory).where(
+            PhoneInventory.product_id == ua["product_id"], PhoneInventory.status == "AVAILABLE")) == 2
