@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
+import socket
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
@@ -22,7 +24,7 @@ from sqlalchemy import delete, func, select, text, update
 from app.config import get_settings
 from app.db import dispose_engine, session_factory
 from app.models import Incident, Job, NotificationOutbox, Order, OrderStatus, Payment, PaymentKind, PaymentMethod, PaymentStatus, Product, ProductStatus, TaskRun
-from app.services import backup, fulfillment, incidents, jobs, monitor, notifications, refunds, telegram
+from app.services import backup, fulfillment, incidents, jobs, monitor, notifications, refunds, sms, telegram
 from app.services import settings as settings_service
 from app.services.common import utcnow
 from app.services.orders import expire_stale_orders
@@ -273,6 +275,30 @@ async def task_outbox() -> str:
     return f"sent {r['sent']}, failed {r['failed']}"
 
 
+_SMS_OWNER = f"{socket.gethostname()}:{os.getpid()}"
+
+
+async def task_sms_poll() -> str:
+    """Claim due SMS activations (lease), then poll each in its own transaction (zombie-safe via generation)."""
+    async with session_factory()() as session:
+        claimed = await sms.claim_due(session, _SMS_OWNER)
+        work = [(a.id, a.lease_generation) for a in claimed]
+        await session.commit()
+    for aid, gen in work:
+        async with session_factory()() as session:
+            await sms.poll_one(session, aid, _SMS_OWNER, gen)
+            await session.commit()
+    return f"polled {len(work)}"
+
+
+async def task_sms_outbox() -> str:
+    """Deliver received SMS codes from the transactional outbox (UNKNOWN sends retried after an audit)."""
+    async with session_factory()() as session:
+        n = await sms.deliver_outbox(session)
+        await session.commit()
+    return f"delivered {n}"
+
+
 async def task_backup() -> str:
     async with session_factory()() as session:
         if not await settings_service.get_bool(session, "auto_backup"):
@@ -337,6 +363,8 @@ PERIODIC: list[tuple[str, int, Callable[[], Awaitable[str]]]] = [
     ("stuck_orders", 300, task_stuck_orders),
     ("payment_checks", 600, task_payment_checks),
     ("low_stock", 600, task_low_stock),
+    ("sms_poll", 15, task_sms_poll),
+    ("sms_outbox", 10, task_sms_outbox),
     ("notification_outbox", 60, task_outbox),
     ("backup", 1800, task_backup),
     ("cleanup", 86400, task_cleanup),
