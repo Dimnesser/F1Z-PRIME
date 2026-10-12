@@ -51,6 +51,11 @@ UNKNOWN-policy, refund-once), worker-таски `task_sms_poll`/`task_sms_outbox
 ТЗ (бот/Mini App UX, эндпоинты, матрица тестов), каталог сервисов/стран + цены, реальный
 `SMS_ACTIVATE_API_KEY` в `.env`. UI/эндпоинт-слой поверх `services/sms.py` ещё не написан.
 
+## SMS user-слой готов (2026-10-12, 2dbbceb)
+Каталог/цены, API, бот, Mini App, админка, crash-recovery — реализованы и протестированы (169 passed).
+Деталь: FINAL_AUDIT.md. Не развёрнуто на vps4 (ждёт подтверждения). Для запуска нужен реальный
+SMS_ACTIVATE_API_KEY в .env + настройка наценок + sms_enabled=true.
+
 ## Следующее конкретное действие
 Крупные инварианты и функции закрыты (см. `PROJECT_AUDIT.md`, `TEST_REPORT.md`). Остаётся опционально:
 1. ЭТАП 3 — косметическая полировка Mini App (оценить реальные пробелы, не переписывать работающее).
