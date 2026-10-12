@@ -182,3 +182,13 @@ implement the remaining stages listed above (see task list in this file).
   owned_sms tables created empty). Data kept: orders/products/users = 4/17/11; `sms_enabled` still false.
   Checks: api healthy after ~5 s, bot/worker/web restarted, Mini App and /admin/ 200 over HTTPS and serve the new
   build, /balance 200, admin SMS API without auth 401, no error lines in api/bot/worker logs.
+
+## Stage H2 — second design pass «SIM card» ✅ deployed (DEPLOYED_COMMIT 9977276)
+- After owner feedback: balance as a SIM card (Tektur numerals), Golos Text UI font, real round flags (flagcdn,
+  emoji fallback), grouped lists instead of cards, price-pill quick buy in the catalog; admin KPI numerals in Tektur;
+  Caddy serves the Mini App index.html with `Cache-Control: no-cache`.
+- Deploy 2026-10-12 13:03 UTC: Webdock script `f1z-deploy-9977276` (id 416390), previous `14830ea`.
+  Backups: `/root/f1z-backup/db-20261012-130335.sql.gz` (gzip OK), `env-20261012-130335.bak`,
+  snapshot `/opt/f1z-prime.prev-20261012-130335`. No migrations (0010 head). Data: orders/products/users = 4/17/14.
+  Checks: api healthy ~5 s, Mini App/admin 200 and serve the new build, index no-cache, admin API 401 without auth,
+  logs: only Caddy's harmless «no OCSP stapling» warning.
