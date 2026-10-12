@@ -1,11 +1,11 @@
 import clsx from 'clsx'
-import { AlertTriangle, Ban, CheckCircle2, Link2, Smartphone } from 'lucide-react'
+import { AlertTriangle, Ban, CheckCircle2, Coins, Link2, Smartphone, TrendingUp, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import {
-  Badge, Btn, Card, Chips, DataTable, Empty, ErrorBox, PageHead, Pager, Skeleton, Tabs, useConfirm, useToast,
+  Badge, Btn, Card, Chips, DataTable, Empty, ErrorBox, PageHead, Pager, Skeleton, StatCard, Tabs, useConfirm, useToast,
   type Column, type Tone,
 } from '../components/ui'
-import { api, dt, errMsg, qs } from '../lib/api'
+import { api, dt, errMsg, money, num, qs } from '../lib/api'
 import { useCan } from '../lib/session'
 import { useApi } from '../lib/useApi'
 
@@ -48,12 +48,14 @@ export default function SmsActivations() {
   return (
     <div>
       <PageHead title="SMS-активации" subtitle="Виртуальные номера: мониторинг, очередь сверки, каталог и прибыль. Наценки задаются в Настройках (раздел SMS)." />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Активные" value={summary.data?.active} tone="text-warning" />
-        <Stat label="Выдано" value={summary.data?.completed} tone="text-success" />
-        <Stat label="Нужна сверка" value={summary.data?.reconciliation_required}
-          tone={summary.data?.reconciliation_required ? 'text-danger' : 'text-muted'} />
-        <Stat label="Прибыль, грн" value={summary.data?.profit} tone="text-primary-soft" money />
+      <div className="stagger mb-5 grid grid-cols-2 gap-3 xl:grid-cols-6">
+        <StatCard size="sm" icon={Smartphone} label="Активные" value={fmt(summary.data?.active)} tone="amber" />
+        <StatCard size="sm" icon={CheckCircle2} label="Выдано" value={fmt(summary.data?.completed)} tone="green" />
+        <StatCard size="sm" icon={AlertTriangle} label="Нужна сверка" value={fmt(summary.data?.reconciliation_required)}
+          tone={summary.data?.reconciliation_required ? 'red' : 'gray'} sub={summary.data?.reconciliation_required ? 'см. вкладку «Сверка»' : 'очередь пуста'} />
+        <StatCard size="sm" icon={Wallet} label="Выручка" value={fmt(summary.data?.revenue, true)} tone="violet" />
+        <StatCard size="sm" icon={Coins} label="Себестоимость" value={fmt(summary.data?.provider_cost, true)} tone="cyan" sub={summary.data ? `возвраты: ${money(summary.data.refunded)}` : undefined} />
+        <StatCard size="sm" icon={TrendingUp} label="Прибыль" value={fmt(summary.data?.profit, true)} tone={summary.data && summary.data.profit < 0 ? 'red' : 'green'} />
       </div>
       <Tabs value={tab} onChange={setTab} tabs={[
         { value: 'activations', label: 'Активации', icon: Smartphone },
@@ -67,14 +69,7 @@ export default function SmsActivations() {
   )
 }
 
-function Stat({ label, value, tone, money }: { label: string; value?: number; tone: string; money?: boolean }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs font-semibold text-muted">{label}</div>
-      <div className={clsx('mt-1 tabular text-2xl font-bold', tone)}>{value === undefined ? '…' : money ? value.toFixed(2) : value}</div>
-    </div>
-  )
-}
+const fmt = (v: number | undefined, isMoney = false) => (v === undefined ? '…' : isMoney ? money(v) : num(v))
 
 function Table({ rev, canFulfill, onChange, filter, reconcile }: {
   rev: number; canFulfill: boolean; onChange: () => void; filter: string | null; reconcile?: boolean

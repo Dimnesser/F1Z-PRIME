@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AreaChart, BarList, MiniBars } from '../components/charts'
 import { StageBadge, orderNo, stageOf, type OrderX } from '../components/orders/shared'
-import { Btn, Card, Chips, Empty, ErrorBox, Modal, PageHead, Skeleton, Toggle, useToast } from '../components/ui'
+import { Btn, Card, Chips, Empty, ErrorBox, Modal, PageHead, Skeleton, StatCard, StatusIndicator, Toggle, useToast } from '../components/ui'
 import { ago, api, compactMoney, errMsg, money, num } from '../lib/api'
 import { hasPerm, useMe } from '../lib/session'
 import type { SeriesPoint } from '../lib/types'
@@ -34,6 +34,7 @@ const WIDGETS: { id: string; label: string; span: string }[] = [
   { id: 'recent_orders', label: 'Последние заказы', span: 'xl:col-span-2' },
   { id: 'categories', label: 'Популярные категории', span: '' },
   { id: 'low_stock', label: 'Низкие остатки', span: '' },
+  { id: 'sms', label: 'SMS-активации', span: '' },
   { id: 'quick', label: 'Быстрые действия', span: 'xl:col-span-3' },
 ]
 const DEFAULT_ORDER = WIDGETS.map((w) => w.id)
@@ -47,26 +48,7 @@ const normalizeOrder = (order: string[] | undefined) => {
   return [...known, ...DEFAULT_ORDER.filter((id) => !known.includes(id))]
 }
 
-function Stat({ icon: Icon, label, value, sub, tone = 'violet', to }: {
-  icon: typeof Users; label: string; value: string; sub?: string; tone?: 'violet' | 'cyan' | 'green' | 'amber' | 'red'; to?: string
-}) {
-  const tones = {
-    violet: 'bg-primary/15 text-primary-soft', cyan: 'bg-secondary/15 text-secondary', green: 'bg-success/15 text-success',
-    amber: 'bg-warning/15 text-warning', red: 'bg-danger/15 text-danger',
-  }
-  const body = (
-    <>
-      <div className="flex items-center justify-between">
-        <span className="text-[12.5px] font-semibold text-muted">{label}</span>
-        <span className={clsx('grid h-8 w-8 place-items-center rounded-lg', tones[tone])}><Icon className="h-4 w-4" /></span>
-      </div>
-      <div className="tabular mt-2 truncate font-display text-[22px] font-bold leading-tight sm:text-2xl">{value}</div>
-      {sub && <div className="mt-0.5 truncate text-xs text-muted">{sub}</div>}
-    </>
-  )
-  const cls = 'card block min-w-0 p-4 transition'
-  return to ? <Link to={to} className={clsx(cls, 'hover:border-white/[0.12]')}>{body}</Link> : <div className={cls}>{body}</div>
-}
+interface SmsSummary { active: number; completed: number; reconciliation_required: number; revenue: number; provider_cost: number; profit: number }
 
 export default function Dashboard() {
   const [days, setDays] = useState<'7' | '30' | '90'>('30')
@@ -88,24 +70,43 @@ export default function Dashboard() {
 
   const widgets: Record<string, ReactNode> = {
     kpi: (
-      <div>
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {loading || !d ? [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <Skeleton key={i} className="h-[104px] rounded-2xl" />) : (<>
-            {money_ && <Stat icon={Wallet} label="Общая выручка" value={money(d.revenue)} sub={`${num(d.paid_orders)} оплаченных заказов`} tone="green" to={finance ? '/finance' : undefined} />}
-            {money_ && <Stat icon={TrendingUp} label="Выручка сегодня" value={money(d.revenue_today)} sub={`${d.orders_today} заказов сегодня`} tone="violet" />}
-            {!money_ && <Stat icon={TrendingUp} label="Оплачено заказов" value={num(d.paid_orders)} sub={`${d.orders_today} сегодня`} tone="violet" />}
-            <Stat icon={ShoppingCart} label="Заказы" value={num(d.orders)} sub={money_ ? `за ${d.days} дн: ${money(d.revenue_period)}` : `за ${d.days} дн оплачено: ${num(periodOrders)}`} tone="cyan" to={can('orders.view') ? '/orders' : undefined} />
-            <Stat icon={Users} label="Пользователи" value={num(d.users)} sub={`+${d.new_users_today} сегодня`} tone="violet" to={can('users.view') ? '/users' : undefined} />
-            <Stat icon={Boxes} label="Товаров в наличии" value={num(d.stock)} sub={`+ ${d.premium_available} красивых номеров`} tone="cyan" to={can('products.view') ? '/products' : undefined} />
-            <Stat icon={Clock} label="Ожидают оплаты" value={num(d.pending_orders)} sub={d.pending_payments ? `${d.pending_payments} платежей на проверке` : 'нет платежей на проверке'} tone="amber" to={can('orders.view') ? '/orders?status=pending' : undefined} />
-            <Stat icon={Phone} label="Номеров в наличии" value={num(d.phones_available)} sub={d.phones_available === 0 ? 'склад пуст' : 'готовы к продаже'} tone={d.phones_available === 0 ? 'red' : 'green'} to={can('products.view') ? '/phones' : undefined} />
-            <Stat icon={AlertTriangle} label="Ошибки выдачи" value={num(d.failed_fulfillments)} sub={d.failed_fulfillments ? 'нужен оператор' : 'нет ошибок'} tone={d.failed_fulfillments ? 'red' : 'green'} to={can('orders.view') ? '/orders?status=paid' : undefined} />
-            <Stat icon={AlertTriangle} label="Неудачные платежи" value={num(d.failed_payments)} sub="отклонённые" tone="red" to={finance ? '/finance' : undefined} />
-            <Stat icon={Headphones} label="Открытые обращения" value={num(d.open_tickets)} sub="ждут ответа" tone="amber" to={can('support.view') ? '/support' : undefined} />
+      <div className="space-y-3">
+        <div className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {loading || !d ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[118px] rounded-2xl" />) : (<>
+            {money_ && <StatCard icon={Wallet} label="Выручка за всё время" value={money(d.revenue)} sub={`${num(d.paid_orders)} оплаченных заказов`} tone="green" to={finance ? '/finance' : undefined} />}
+            {money_ && <StatCard icon={TrendingUp} label={`Продажи за ${d.days} дн`} value={money(d.revenue_period)} sub={`сегодня ${money(d.revenue_today)}`} tone="violet" />}
+            {!money_ && <StatCard icon={TrendingUp} label="Оплачено заказов" value={num(d.paid_orders)} sub={`${d.orders_today} сегодня`} tone="violet" />}
+            <StatCard icon={ShoppingCart} label="Заказы" value={num(d.orders)} sub={`${d.orders_today} сегодня · ${num(periodOrders)} за ${d.days} дн`} tone="cyan" to={can('orders.view') ? '/orders' : undefined} />
+            <StatCard icon={Users} label="Пользователи" value={num(d.users)} sub={`+${d.new_users_today} сегодня`} tone="violet" to={can('users.view') ? '/users' : undefined} />
           </>)}
         </div>
+        <div className="card p-2">
+          <div className="flex items-center justify-between px-3 pb-1 pt-2">
+            <h2 className="text-[13px] font-semibold">Состояние магазина</h2>
+            {d && <StatusIndicator tone={d.failed_fulfillments || d.failed_payments ? 'red' : d.pending_payments || d.open_tickets ? 'amber' : 'green'}
+              label={d.failed_fulfillments || d.failed_payments ? 'Есть ошибки' : d.pending_payments || d.open_tickets ? 'Требует внимания' : 'Всё в порядке'} live />}
+          </div>
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-6">
+            {!d ? [0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="m-1 h-[62px]" />) : ([
+              { icon: Boxes, label: 'Товаров в наличии', value: num(d.stock), sub: `+${d.premium_available} красивых`, tone: 'text-secondary', to: can('products.view') ? '/products' : undefined },
+              { icon: Phone, label: 'Номеров на складе', value: num(d.phones_available), sub: d.phones_available === 0 ? 'склад пуст' : 'готовы к продаже', tone: d.phones_available === 0 ? 'text-danger' : 'text-success', to: can('products.view') ? '/phones' : undefined },
+              { icon: Clock, label: 'Ожидают оплаты', value: num(d.pending_orders), sub: d.pending_payments ? `${d.pending_payments} на проверке` : 'нет на проверке', tone: d.pending_orders ? 'text-warning' : 'text-muted', to: can('orders.view') ? '/orders?status=pending' : undefined },
+              { icon: AlertTriangle, label: 'Ошибки выдачи', value: num(d.failed_fulfillments), sub: d.failed_fulfillments ? 'нужен оператор' : 'нет ошибок', tone: d.failed_fulfillments ? 'text-danger' : 'text-success', to: can('orders.view') ? '/orders?status=paid' : undefined },
+              { icon: CreditCard, label: 'Неудачные платежи', value: num(d.failed_payments), sub: 'отклонённые', tone: d.failed_payments ? 'text-danger' : 'text-muted', to: finance ? '/finance' : undefined },
+              { icon: Headphones, label: 'Открытые обращения', value: num(d.open_tickets), sub: 'ждут ответа', tone: d.open_tickets ? 'text-warning' : 'text-muted', to: can('support.view') ? '/support' : undefined },
+            ]).map(({ icon: Icon, label, value, sub, tone, to }) => {
+              const body = (<>
+                <div className="flex items-center gap-1.5 text-[12px] text-muted"><Icon className={clsx('h-3.5 w-3.5', tone)} /> <span className="truncate">{label}</span></div>
+                <div className={clsx('tabular mt-1 text-[19px] font-bold leading-tight', tone === 'text-muted' ? 'text-ink' : tone)}>{value}</div>
+                <div className="truncate text-[11.5px] text-muted">{sub}</div>
+              </>)
+              const cls = 'block min-w-0 rounded-xl px-3 py-2.5'
+              return to ? <Link key={label} to={to} className={clsx(cls, 'transition hover:bg-white/[0.035]')}>{body}</Link> : <div key={label} className={cls}>{body}</div>
+            })}
+          </div>
+        </div>
         {d && d.pending_payments > 0 && can('payments.view') && (
-          <Link to="/finance" className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-warning/10 px-4 py-3 text-sm font-semibold text-warning ring-1 ring-warning/20">
+          <Link to="/finance" className="flex items-center justify-between gap-3 rounded-2xl bg-warning/10 px-4 py-3 text-sm font-semibold text-warning ring-1 ring-inset ring-warning/20">
             <span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> {d.pending_payments} ручных платежей ждут проверки</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
@@ -145,7 +146,7 @@ export default function Dashboard() {
     recent_orders: (
       <Card className="h-full" pad={false} title="Последние заказы" action={can('orders.view') && <Link to="/orders" className="text-sm font-semibold text-primary-soft">Все →</Link>}>
         {!d ? <div className="space-y-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div> : d.recent_orders.length === 0 ? <Empty title="Заказов пока нет" /> : (
-          <div className="divide-y divide-white/[0.05]">
+          <div className="divide-y divide-line/60">
             {d.recent_orders.map((o) => (
               <button key={o.id} type="button" disabled={!can('orders.view')} onClick={() => navigate(`/orders/${o.id}`)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.02] disabled:cursor-default sm:px-5">
                 <div className="min-w-0 flex-1">
@@ -192,6 +193,7 @@ export default function Dashboard() {
         )}
       </Card>
     ),
+    sms: <SmsWidget money_={money_} />,
     quick: <QuickActions can={can} />,
   }
 
@@ -313,7 +315,7 @@ function Customize({ prefs, onClose, onSaved }: { prefs: Prefs; onClose: () => v
               return (
                 <li key={id} draggable onDragStart={() => setDragged(id)} onDragEnd={() => setDragged(null)}
                   onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(id)}
-                  className={clsx('flex items-center gap-2 rounded-xl border border-white/[0.06] bg-surface px-2 py-1.5', dragged === id && 'opacity-50')}>
+                  className={clsx('flex items-center gap-2 rounded-xl border border-line/70 bg-surface px-2 py-1.5', dragged === id && 'opacity-50')}>
                   <span className="w-5 shrink-0 text-center text-xs tabular text-muted">{i + 1}</span>
                   <span className={clsx('min-w-0 flex-1 truncate text-sm font-semibold', off && 'text-muted line-through')}>{w.label}</span>
                   <button type="button" aria-label="Выше" disabled={i === 0} onClick={() => move(i, -1)} className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-white/[0.06] hover:text-ink disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
@@ -329,5 +331,33 @@ function Customize({ prefs, onClose, onSaved }: { prefs: Prefs; onClose: () => v
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** SMS-activation health (shown only to staff who can see orders; the endpoint enforces the same permission). */
+function SmsWidget({ money_ }: { money_: boolean }) {
+  const me = useMe()
+  const allowed = hasPerm(me, 'orders.view')
+  const { data, error } = useApi<SmsSummary>(allowed ? '/sms/summary' : null, { poll: 60_000 })
+  if (!allowed) return null
+  return (
+    <Card className="h-full" title="SMS-активации" action={<Link to="/sms" className="text-sm font-semibold text-primary-soft">Открыть →</Link>}>
+      {error ? <div className="py-4 text-center text-sm text-muted">Нет данных</div> : !data ? <Skeleton className="h-32" /> : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-white/[0.03] p-2.5"><div className="text-[11px] text-muted">Активные</div><div className="tabular text-lg font-bold text-warning">{num(data.active)}</div></div>
+            <div className="rounded-xl bg-white/[0.03] p-2.5"><div className="text-[11px] text-muted">Выдано</div><div className="tabular text-lg font-bold text-success">{num(data.completed)}</div></div>
+            <div className="rounded-xl bg-white/[0.03] p-2.5"><div className="text-[11px] text-muted">Сверка</div><div className={clsx('tabular text-lg font-bold', data.reconciliation_required ? 'text-danger' : 'text-ink')}>{num(data.reconciliation_required)}</div></div>
+          </div>
+          {money_ && (
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-muted">Выручка</span><span className="tabular font-semibold">{money(data.revenue)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Себестоимость</span><span className="tabular font-semibold">{money(data.provider_cost)}</span></div>
+              <div className="flex justify-between border-t border-line/60 pt-1.5"><span className="text-muted">Прибыль</span><span className={clsx('tabular font-bold', data.profit >= 0 ? 'text-success' : 'text-danger')}>{money(data.profit)}</span></div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   )
 }
