@@ -69,9 +69,12 @@ def resolve_session_path(secret: str, sessions_dir: Path) -> Path:
     if raw.endswith(_SESSION_SUFFIX):
         return sessions_dir / Path(raw).name
 
-    digits = re.sub(r"\D+", "", raw)
-    if digits:
-        return sessions_dir / f"{digits}{_SESSION_SUFFIX}"
+    # Phone-like secret (only digits and phone punctuation) → {digits}.session.
+    # A mixed token such as "acc_1" is a basename, not a phone, so it is kept as-is below.
+    if re.fullmatch(r"[+\d][\d\s()./-]*", raw):
+        digits = re.sub(r"\D+", "", raw)
+        if digits:
+            return sessions_dir / f"{digits}{_SESSION_SUFFIX}"
 
     # basename without extension
     name = Path(raw).name
