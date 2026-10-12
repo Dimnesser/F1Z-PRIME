@@ -1,7 +1,7 @@
 import { initData } from './telegram'
 import type {
   Category, CountryCatalog, Me, Order, OrderDetail, PayMethod, PayResponse, Payment, PremiumNumber, Product,
-  PromoPreview, PublicConfig, SupportCategory, Ticket, TicketDetail, Transaction,
+  PromoPreview, PublicConfig, SmsActivation, SmsPrices, SupportCategory, Ticket, TicketDetail, Transaction,
 } from './types'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
@@ -69,7 +69,15 @@ export const api = {
   ticket: (id: number) => request<TicketDetail>(`/api/support/tickets/${id}`),
   createTicket: (subject: string, text: string) => post<TicketDetail>('/api/support/tickets', { subject, text }),
   replyTicket: (id: number, text: string) => post<TicketDetail>(`/api/support/tickets/${id}/messages`, { text }),
+  smsPrices: (country?: string) => request<SmsPrices>(`/api/sms/prices${country ? `?country=${country}` : ''}`),
+  smsPurchase: (country: string, service: string, idempotency_key: string) =>
+    post<SmsActivation>('/api/sms/purchase', { country, service, idempotency_key }),
+  smsActivations: () => request<SmsActivation[]>('/api/sms/activations'),
+  smsActivation: (id: number) => request<SmsActivation>(`/api/sms/activations/${id}`),
+  smsCancel: (id: number) => post<SmsActivation>(`/api/sms/activations/${id}/cancel`),
 }
+
+export const SMS_ACTIVE = ['RESERVED', 'API_PENDING', 'WAITING', 'CANCEL_REQUESTED', 'RECONCILIATION_REQUIRED']
 
 export function newIdempotencyKey(): string {
   const rnd = crypto.getRandomValues(new Uint8Array(12))

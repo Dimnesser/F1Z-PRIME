@@ -10,6 +10,7 @@ import Catalog from './pages/Catalog'
 import Home from './pages/Home'
 import NumberPage from './pages/NumberPage'
 import Numbers from './pages/Numbers'
+import Sms from './pages/Sms'
 import OrderDetail from './pages/OrderDetail'
 import Orders from './pages/Orders'
 import ProductPage from './pages/ProductPage'
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/catalog" element={<Catalog />} />
             <Route path="/numbers" element={<Numbers />} />
+            <Route path="/sms" element={<Sms />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/orders/:id" element={<OrderDetail />} />
             <Route path="/profile" element={<Profile />} />

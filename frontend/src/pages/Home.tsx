@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ArrowRight, Gem, Globe2, Headphones, ShieldCheck, Sparkles, Undo2, Zap } from 'lucide-react'
+import { ArrowRight, Gem, Globe2, Headphones, ShieldCheck, Smartphone, Sparkles, Undo2, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { PremiumCard, ProductMini } from '../components/Cards'
 import { MaintenanceNotice, StoreLinks } from '../components/StoreInfo'
@@ -62,6 +62,19 @@ export default function Home() {
 
       {s?.shop_description && <p className="-mt-3 px-1 text-[13.5px] leading-relaxed text-muted">{s.shop_description}</p>}
       <StoreLinks />
+
+      <motion.button
+        whileTap={{ scale: 0.97 }}
+        onClick={() => navigate('/sms')}
+        className="flex w-full items-center gap-3 rounded-2xl bg-card p-4 text-left ring-1 ring-white/[0.06]"
+      >
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand"><Smartphone className="h-6 w-6" /></div>
+        <div className="min-w-0 flex-1">
+          <div className="font-bold">Купить виртуальный номер</div>
+          <div className="text-[12.5px] text-muted">SMS-код для регистрации — придёт автоматически</div>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-muted" />
+      </motion.button>
 
       {/* Categories */}
       <section>

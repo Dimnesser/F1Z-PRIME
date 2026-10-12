@@ -164,3 +164,12 @@ export interface Ticket {
 export interface TicketDetail extends Ticket {
   messages: { id: number; is_admin: boolean; text: string; created_at: string }[]
 }
+
+export interface SmsItem { country: string; service: string; price: number; count: number }
+export interface SmsCountry { code: string; title: string }
+export interface SmsService { code: string; title: string }
+export interface SmsPrices { configured: boolean; countries: SmsCountry[]; services: SmsService[]; items: SmsItem[] }
+export interface SmsActivation {
+  id: number; status: string; service: string; country: string; phone_number: string | null
+  code: string | null; cost: number; refunded: boolean; created_at: string | null; expires_at: string | null
+}
