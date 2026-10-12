@@ -792,3 +792,69 @@ class PhoneVerification(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class SmsActivation(Base):
+    """A bought virtual number that receives one confirmation code.
+
+    Reuses the existing users/orders/ledger. The lease (owner + generation) makes polling crash-safe:
+    an update is valid only while the row's lease_generation matches, so a revived "zombie" worker after
+    a TTL lapse cannot clobber a newer lease.
+    """
+
+    __tablename__ = "sms_activations"
+    __table_args__ = (
+        Index("ix_sms_activations_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"))
+    provider: Mapped[str] = mapped_column(String(32), default="sms_activate", server_default="sms_activate", nullable=False)
+    service: Mapped[str] = mapped_column(String(32), default="", server_default="", nullable=False)
+    country: Mapped[str] = mapped_column(String(8), default="", server_default="", nullable=False)
+    activation_id: Mapped[str | None] = mapped_column(String(64))  # provider id (unique when set)
+    phone_number: Mapped[str | None] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(32), default="RESERVED", server_default="RESERVED", nullable=False)
+    code: Mapped[str | None] = mapped_column(String(32))
+    cost: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, server_default="0", nullable=False)
+    refunded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_owner: Mapped[str | None] = mapped_column(String(64))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_generation: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+
+
+class DeliveryOutbox(Base):
+    """Transactional outbox: a received code is delivered to the buyer as reliably as it is stored.
+
+    PENDING → SENT on a confirmed Telegram send. An indeterminate send (timeout / 5xx) becomes UNKNOWN and
+    is retried only after an audited warning, since the Bot API does not deduplicate outgoing messages.
+    """
+
+    __tablename__ = "delivery_outbox"
+    __table_args__ = (
+        Index("ix_delivery_outbox_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    sms_activation_id: Mapped[int | None] = mapped_column(ForeignKey("sms_activations.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), default="activation_code", server_default="activation_code", nullable=False)
+    text: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="PENDING", server_default="PENDING", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
