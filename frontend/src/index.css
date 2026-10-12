@@ -22,7 +22,7 @@
   --warning: 255 181 71;
   --danger: 255 97 120;
 
-  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.035) inset, 0 18px 36px -28px rgb(0 0 0 / 0.9);
+  --shadow-card: 0 18px 36px -30px rgb(0 0 0 / 0.9);
   --shadow-pop: 0 24px 60px -16px rgb(0 0 0 / 0.75);
   --glow-1: rgb(117 107 255 / 0.16);
   --glow-2: rgb(52 213 197 / 0.08);
@@ -54,7 +54,7 @@
   --success: 15 159 110;
   --warning: 183 118 11;
   --danger: 219 56 82;
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 12px 28px -22px rgb(15 23 42 / 0.25);
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 10px 24px -20px rgb(15 23 42 / 0.22);
   --shadow-pop: 0 24px 60px -18px rgb(15 23 42 / 0.3);
   --glow-1: rgb(91 80 240 / 0.08);
   --glow-2: rgb(14 159 146 / 0.05);
@@ -64,7 +64,6 @@ html, body, #root { background: rgb(var(--bg)); min-height: 100%; }
 
 body {
   @apply font-sans text-ink antialiased;
-  font-feature-settings: 'cv11', 'ss01';
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
   text-rendering: optimizeLegibility;
@@ -88,11 +87,13 @@ body::before {
 button, a { touch-action: manipulation; }
 
 @layer components {
+  /* grouped surface: no outline, a hairline top highlight gives the edge (Telegram / iOS inset-group feel) */
   .card {
-    @apply rounded-[20px] border border-line/70 bg-surface shadow-card;
+    @apply rounded-[22px] bg-surface;
+    box-shadow: inset 0 1px 0 rgb(var(--ov) / 0.04), var(--shadow-card);
   }
   .card-soft { @apply rounded-[20px] bg-ov/[0.035] ring-1 ring-inset ring-line/60; }
-  .hairline { @apply divide-y divide-line/60; }
+  .hairline > * + * { box-shadow: inset 0 1px 0 rgb(var(--line) / 0.55); }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { scrollbar-width: none; }
   .pressable {
@@ -100,14 +101,14 @@ button, a { touch-action: manipulation; }
   }
   .pressable:active:not(:disabled) { transform: scale(0.97); }
   .input {
-    @apply h-12 w-full rounded-2xl border border-line bg-surface px-4 text-[16px] text-ink outline-none transition placeholder:text-muted/80 focus:border-primary/70 focus:ring-4 focus:ring-primary/15 disabled:opacity-60;
+    @apply h-12 w-full rounded-[16px] border border-transparent bg-surface px-4 text-[16px] text-ink outline-none transition placeholder:text-muted/80 focus:border-primary/70 focus:ring-4 focus:ring-primary/15 disabled:opacity-60;
   }
   textarea.input { @apply h-auto py-3 leading-relaxed; }
   .chip {
-    @apply inline-flex h-9 shrink-0 select-none items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-muted transition-colors;
+    @apply inline-flex h-9 shrink-0 select-none items-center gap-1.5 whitespace-nowrap rounded-full bg-surface px-4 text-[14px] font-medium text-muted transition-colors;
   }
   .chip[aria-pressed='true'], .chip-active { @apply border-transparent bg-ink text-bg; }
-  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-muted; }
+  .eyebrow { @apply text-[13px] font-medium text-muted; }
   .num { font-variant-numeric: tabular-nums; }
   .text-gradient { @apply bg-brand bg-clip-text text-transparent; }
 }

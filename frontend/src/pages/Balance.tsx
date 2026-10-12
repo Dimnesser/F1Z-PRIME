@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowDownLeft, ArrowUpRight, Info, ReceiptText, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Info, Plus, ReceiptText, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BalanceCard } from '../components/Cards'
@@ -66,26 +66,23 @@ export default function Balance() {
   }, [list])
 
   return (
-    <div className="space-y-5">
-      <PageTitle title="Баланс" subtitle="Пополнения, покупки и возвраты по вашему счёту" />
+    <div className="space-y-4">
+      <PageTitle title="Баланс" />
 
-      <BalanceCard
-        balance={me?.balance}
-        loading={meLoading}
-        onTopup={topup}
-        footer={
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-2xl bg-ov/[0.05] px-3 py-2.5">
-              <div className="flex items-center gap-1 text-[11.5px] text-muted"><ArrowDownLeft className="h-3.5 w-3.5 text-success" /> Поступления</div>
-              <div className="num mt-0.5 truncate text-[14px] font-semibold">{money(totals.inc)}</div>
-            </div>
-            <div className="rounded-2xl bg-ov/[0.05] px-3 py-2.5">
-              <div className="flex items-center gap-1 text-[11.5px] text-muted"><ArrowUpRight className="h-3.5 w-3.5" /> Списания</div>
-              <div className="num mt-0.5 truncate text-[14px] font-semibold">{money(totals.out)}</div>
-            </div>
-          </div>
-        }
-      />
+      <BalanceCard balance={me?.balance} loading={meLoading} compact />
+      <button type="button" onClick={topup} className="pressable flex h-[52px] w-full items-center justify-center gap-2 rounded-[16px] bg-primary text-[15px] font-semibold text-primary-ink shadow-glow">
+        <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} /> Пополнить баланс
+      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="card px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[13px] text-muted"><ArrowDownLeft className="h-4 w-4 text-success" /> Поступило</div>
+          <div className="num mt-1 truncate text-[17px] font-semibold">{money(totals.inc)}</div>
+        </div>
+        <div className="card px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[13px] text-muted"><ArrowUpRight className="h-4 w-4" /> Потрачено</div>
+          <div className="num mt-1 truncate text-[17px] font-semibold">{money(totals.out)}</div>
+        </div>
+      </div>
 
       {config?.settings.min_topup && (
         <div className="flex items-start gap-2.5 rounded-2xl bg-ov/[0.03] px-3.5 py-3 text-[12.5px] leading-snug text-muted">
@@ -95,7 +92,7 @@ export default function Balance() {
       )}
 
       <section aria-label="История операций">
-        <h2 className="mb-3 px-0.5 text-[17px] font-bold tracking-tight">История операций</h2>
+        <h2 className="mb-3 px-1 pt-3 text-[19px] font-semibold tracking-[-0.01em]">История операций</h2>
         <Chips value={filter} onChange={setFilter} options={FILTERS} className="mb-4" />
         {txs.isLoading ? (
           <div className="space-y-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-[18px]" />)}</div>
@@ -112,7 +109,7 @@ export default function Balance() {
           <div className="space-y-4">
             {groups.map((g) => (
               <div key={dayKey(g[0].created_at)}>
-                <div className="eyebrow mb-2 px-1">{dayTitle(g[0].created_at)}</div>
+                <div className="mb-1.5 px-4 text-[13px] text-muted">{dayTitle(g[0].created_at)}</div>
                 <div className="card hairline overflow-hidden">
                   {g.map((t) => {
                     const plus = t.amount > 0
@@ -123,8 +120,8 @@ export default function Balance() {
                           <Icon className="h-[18px] w-[18px]" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[14.5px] font-semibold">{TX_LABEL[t.type] ?? t.type}</div>
-                          <div className="truncate text-[12px] text-muted">{t.description || '—'} · {time(t.created_at)}</div>
+                          <div className="truncate text-[15px] font-medium">{TX_LABEL[t.type] ?? t.type}</div>
+                          <div className="truncate text-[12.5px] text-muted">{time(t.created_at)}{t.description ? `, ${t.description}` : ''}</div>
                         </div>
                         <div className="shrink-0 text-right">
                           <div className={clsx('num text-[14.5px] font-bold', plus && 'text-success')}>{plus ? '+' : '−'}{money(Math.abs(t.amount))}</div>

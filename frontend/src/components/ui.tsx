@@ -144,24 +144,23 @@ export function StatusIndicator({ tone, label, live }: { tone: Tone; label: Reac
 
 export function SectionHeader({ title, action, onAction, className }: { title: ReactNode; action?: string; onAction?: () => void; className?: string }) {
   return (
-    <div className={clsx('mb-3 flex items-center justify-between gap-3 px-0.5', className)}>
-      <h2 className="text-[17px] font-bold tracking-tight">{title}</h2>
+    <div className={clsx('mb-2 flex items-end justify-between gap-3 px-1', className)}>
+      <h2 className="text-[19px] font-semibold tracking-[-0.01em]">{title}</h2>
       {action && (
-        <button type="button" onClick={onAction} className="pressable -mr-2 flex h-9 items-center gap-0.5 rounded-lg px-2 text-[13px] font-semibold text-primary-soft">
-          {action} <ChevronRight className="h-4 w-4" />
+        <button type="button" onClick={onAction} className="pressable -mr-1 flex h-8 items-center rounded-lg px-1 text-[14px] font-medium text-primary-soft">
+          {action}
         </button>
       )}
     </div>
   )
 }
 
-export function PageTitle({ title, subtitle, right, eyebrow }: { title: string; subtitle?: ReactNode; right?: ReactNode; eyebrow?: string }) {
+export function PageTitle({ title, subtitle, right }: { title: string; subtitle?: ReactNode; right?: ReactNode; eyebrow?: string }) {
   return (
-    <header className="mb-5 flex items-start justify-between gap-3 px-0.5 pt-1">
+    <header className="mb-5 flex items-start justify-between gap-3 px-1 pt-2">
       <div className="min-w-0">
-        {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
-        <h1 className="text-[26px] font-bold leading-[1.15] tracking-[-0.02em]">{title}</h1>
-        {subtitle && <p className="mt-1.5 text-[13.5px] leading-snug text-muted">{subtitle}</p>}
+        <h1 className="text-[30px] font-bold leading-[1.1] tracking-[-0.025em]">{title}</h1>
+        {subtitle && <p className="mt-2 max-w-[34ch] text-[14px] leading-snug text-muted">{subtitle}</p>}
       </div>
       {right}
     </header>

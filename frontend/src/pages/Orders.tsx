@@ -3,7 +3,9 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { OrderStageBadge } from '../components/StatusBadge'
 import { Button, Chips, EmptyState, ErrorState, PageTitle, Skeleton } from '../components/ui'
-import { date, money } from '../lib/format'
+import { money } from '../lib/format'
+
+const shortDay = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 import { useOrders } from '../lib/queries'
 import { haptic } from '../lib/telegram'
 import type { Order } from '../lib/types'
@@ -40,7 +42,7 @@ export default function Orders() {
 
   return (
     <div>
-      <PageTitle title="Заказы" subtitle="Статусы, выданные товары и история покупок" />
+      <PageTitle title="Заказы" />
       <Chips
         className="mb-4"
         value={current}
@@ -64,29 +66,23 @@ export default function Orders() {
           action={current === 'active' || current === 'done' ? <Button size="md" onClick={() => navigate('/catalog')}>Перейти в каталог</Button> : undefined}
         />
       ) : (
-        <div className="stagger space-y-2.5">
+        <div className="card hairline overflow-hidden">
           {list.map((o) => (
             <button
               key={o.id}
               type="button"
               onClick={() => { haptic.select(); navigate(`/orders/${o.id}`) }}
-              className="card pressable flex w-full items-center gap-3 p-3.5 text-left"
+              className="pressable flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-ov/[0.03]"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="num font-mono text-[12px] text-muted">{o.public_id ?? `#${o.id}`}</span>
-                  <span className="text-[12px] text-muted">· {date(o.created_at)}</span>
-                </div>
-                <div className="mt-1 truncate text-[15px] font-semibold">{o.item_title}</div>
-                <div className="mt-2 flex items-center gap-2">
-                  <OrderStageBadge order={o} />
-                  {o.quantity > 1 && <span className="text-[12px] text-muted">{o.quantity} шт</span>}
-                </div>
+                <div className="truncate text-[15.5px] font-medium">{o.item_title}{o.quantity > 1 ? `, ${o.quantity} шт.` : ''}</div>
+                <div className="mt-1.5"><OrderStageBadge order={o} /></div>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span className="num text-[16px] font-bold">{money(o.total)}</span>
-                <ChevronRight className="h-4 w-4 text-muted" />
+              <div className="shrink-0 text-right">
+                <div className="num text-[15.5px] font-semibold">{money(o.total)}</div>
+                <div className="mt-1 text-[12.5px] text-muted">{shortDay(o.created_at)}</div>
               </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted/70" />
             </button>
           ))}
         </div>

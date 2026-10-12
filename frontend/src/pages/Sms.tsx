@@ -164,7 +164,7 @@ export default function Sms() {
                       <span className="truncate text-[14px] font-semibold">{svcTitle[a.service] ?? a.service}</span>
                       <span className="shrink-0 text-[12px] text-muted">{countryTitle[a.country] ?? a.country}</span>
                     </div>
-                    <div className="num truncate font-mono text-[12.5px] text-muted">{a.phone_number ?? '—'}{a.code ? ` · код ${a.code}` : ''}</div>
+                    <div className="num truncate font-display text-[12.5px] text-muted">{a.phone_number ?? '—'}{a.code ? ` · код ${a.code}` : ''}</div>
                     {a.created_at && <div className="text-[11.5px] text-muted">{date(a.created_at)}</div>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
@@ -256,7 +256,7 @@ function ActivationCard({ a, countryTitle, serviceTitle, onCopy, onCancel, onRef
 
       <button type="button" disabled={!a.phone_number} onClick={() => a.phone_number && onCopy(a.phone_number)}
         className="pressable mt-3 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 text-left ring-1 ring-inset ring-line/70">
-        <span className="num min-w-0 break-all font-mono text-[18px] font-bold tracking-wide">{a.phone_number ?? 'Получаем номер…'}</span>
+        <span className="num min-w-0 break-all font-display text-[18px] font-bold tracking-wide">{a.phone_number ?? 'Получаем номер…'}</span>
         {a.phone_number && <Copy className="h-4 w-4 shrink-0 text-accent" aria-label="Скопировать номер" />}
       </button>
 
@@ -265,7 +265,7 @@ function ActivationCard({ a, countryTitle, serviceTitle, onCopy, onCancel, onRef
           className="pressable mt-2 flex min-h-[60px] w-full items-center justify-between gap-3 rounded-2xl bg-success/12 px-4 py-3 text-left ring-1 ring-inset ring-success/30">
           <span>
             <span className="block text-[11.5px] font-semibold text-success">Код из SMS</span>
-            <span className="num font-mono text-[26px] font-bold tracking-[0.18em] text-success">{a.code}</span>
+            <span className="num font-display text-[26px] font-bold tracking-[0.18em] text-success">{a.code}</span>
           </span>
           <Check className="h-6 w-6 shrink-0 text-success" />
         </button>
@@ -273,7 +273,7 @@ function ActivationCard({ a, countryTitle, serviceTitle, onCopy, onCancel, onRef
         <div className="mt-3">
           <div className="flex items-center justify-between text-[12.5px]">
             <span className="flex items-center gap-1.5 text-muted"><Clock3 className="h-3.5 w-3.5" /> Ожидаем код</span>
-            <span role="timer" className="num font-mono font-semibold">{mm}:{ss}</span>
+            <span role="timer" className="num font-display font-semibold">{mm}:{ss}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ov/[0.08]">
             <div className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />

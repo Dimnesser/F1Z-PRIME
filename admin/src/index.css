@@ -5,7 +5,7 @@
 :root { color-scheme: dark; -webkit-tap-highlight-color: transparent; }
 html, body, #root { background: #080B12; min-height: 100%; }
 html { overflow-x: hidden; }
-body { @apply font-sans text-ink antialiased; overflow-x: hidden; font-feature-settings: 'cv11', 'ss01'; }
+body { @apply font-sans text-ink antialiased; overflow-x: hidden;  }
 :focus-visible { outline: 2px solid #756BFF; outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }

@@ -19,9 +19,11 @@ export default {
         danger: '#FF6178',
       },
       fontFamily: {
-        sans: ['Onest', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        display: ['Onest', 'system-ui', 'sans-serif'],
-        brand: ['Unbounded', 'Onest', 'sans-serif'],
+        sans: ['Golos Text', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['Golos Text', 'system-ui', 'sans-serif'],
+        // numerals with character for KPI values
+        figure: ['Tektur', 'Golos Text', 'sans-serif'],
+        brand: ['Unbounded', 'Golos Text', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       boxShadow: {

@@ -154,7 +154,7 @@ export function StatCard({ icon: Icon, label, value, sub, tone = 'violet', to, t
         <span className="text-[12.5px] font-medium text-muted">{label}</span>
         <span className={clsx('grid shrink-0 place-items-center rounded-lg', size === 'sm' ? 'h-7 w-7' : 'h-8 w-8', tint[tone])}><Icon className="h-4 w-4" /></span>
       </div>
-      <div className={clsx('tabular mt-2 truncate font-bold leading-tight tracking-[-0.02em]', size === 'sm' ? 'text-[20px]' : 'text-[24px] sm:text-[26px]')}>{value}</div>
+      <div className={clsx('tabular mt-2 truncate font-figure font-semibold leading-tight', size === 'sm' ? 'text-[21px]' : 'text-[26px] sm:text-[28px]')}>{value}</div>
       <div className="mt-1 flex min-w-0 items-center gap-2">
         {trend !== undefined && trend !== null && (
           <span className={clsx('tabular shrink-0 rounded-md px-1.5 py-px text-[11px] font-semibold', trend >= 0 ? 'bg-success/12 text-success' : 'bg-danger/12 text-danger')}>

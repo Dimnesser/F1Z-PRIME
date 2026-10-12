@@ -40,7 +40,7 @@ export function ManualPayment({ payment, instructions, onSubmitted }: { payment:
           className="mt-3 flex min-h-[44px] w-full items-center justify-between rounded-xl bg-ov/[0.06] px-3.5 py-2.5 text-sm pressable"
         >
           <span className="text-muted">Комментарий к переводу</span>
-          <span className="flex items-center gap-1.5 font-mono font-bold">{ref} <Copy className="h-3.5 w-3.5 text-muted" /></span>
+          <span className="flex items-center gap-1.5 font-display font-bold">{ref} <Copy className="h-3.5 w-3.5 text-muted" /></span>
         </button>
       </div>
       <textarea

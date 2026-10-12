@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Eye, Gem, Lock, Sparkles } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Flag } from '../components/Flag'
 import { Badge, Button, EmptyState, IconButton, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { money } from '../lib/format'
@@ -25,17 +26,17 @@ export default function NumberPage() {
         <div className="relative overflow-hidden rounded-[23px] bg-surface p-6">
           <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgb(var(--primary)/0.25),transparent)]" />
           <div className="relative flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-ov/[0.07] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-ov/[0.07] px-3 py-1 text-[13px] font-medium">
               <Gem className="h-3.5 w-3.5 text-primary-soft" /> {n.title}
             </span>
-            <span className="text-4xl leading-none">{n.country?.flag ?? '🌐'}</span>
+            <Flag code={n.country?.code} emoji={n.country?.flag} size={36} />
           </div>
-          <div className="num relative mt-8 text-center font-mono text-[28px] font-bold tracking-wider">{n.display_mask}</div>
+          <div className="num relative mt-8 text-center font-display text-[32px] font-semibold tracking-[0.06em]">{n.display_mask}</div>
           <div className="relative mt-2 text-center text-[13px] text-muted">{n.country?.name} · {n.country?.dial_code}</div>
           <div className="relative mt-8 flex items-end justify-between">
             <div>
-              <div className="eyebrow">Стоимость</div>
-              <div className="num mt-1 text-[28px] font-bold leading-none tracking-tight">{money(n.price)}</div>
+              <div className="text-[13px] text-muted">Стоимость</div>
+              <div className="num mt-1 font-display text-[28px] font-semibold leading-none">{money(n.price)}</div>
             </div>
             <Badge tone={available ? 'green' : 'gray'} dot>{available ? 'В наличии' : 'Недоступен'}</Badge>
           </div>

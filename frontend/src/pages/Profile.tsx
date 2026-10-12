@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, ChevronRight, Copy, Headphones, MoonStar, ReceiptText, ShieldCheck, ShoppingBag, Wallet } from 'lucide-react'
+import { ChevronRight, Copy, Headphones, MoonStar, ReceiptText, ShieldCheck, Wallet } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { useStoreLinks } from '../components/StoreInfo'
 import { useToast } from '../components/Toast'
-import { Badge, ErrorState, ListRow, Skeleton, StatCard, Tabs } from '../components/ui'
+import { Badge, ErrorState, ListRow, Skeleton, Tabs } from '../components/ui'
 import { api } from '../lib/api'
-import { money, shortDate } from '../lib/format'
+import { money } from '../lib/format'
 import { useConfig, useMe } from '../lib/queries'
 import { openAdminPanel, openExternal } from '../lib/telegram'
 import { useTheme, type ThemePref } from '../lib/theme'
@@ -36,17 +36,16 @@ export default function Profile() {
         <button
           type="button"
           onClick={() => { navigator.clipboard?.writeText(String(me.telegram_id)); toast('ID скопирован', 'success') }}
-          className="pressable relative mt-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-ov/[0.06] px-3.5 font-mono text-[12.5px] font-semibold"
+          className="pressable relative mt-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-ov/[0.06] px-3.5 font-display text-[12.5px] font-semibold"
         >
           <span className="num">ID {me.telegram_id}</span> <Copy className="h-3.5 w-3.5 text-muted" aria-label="Скопировать ID" />
         </button>
-        {config?.dev_mode && <div className="relative mt-3"><Badge tone="amber">DEV_MODE · тестовый пользователь</Badge></div>}
-      </section>
-
-      <section aria-label="Статистика" className="grid grid-cols-3 gap-2">
-        <StatCard icon={<ShoppingBag className="h-4 w-4" />} label="Покупок" value={me.orders_count} />
-        <StatCard icon={<Wallet className="h-4 w-4" />} tone="accent" label="Потрачено" value={money(me.total_spent)} />
-        <StatCard icon={<CalendarDays className="h-4 w-4" />} tone="success" label="С нами с" value={shortDate(me.created_at).replace(' г.', '')} />
+        {config?.dev_mode && <div className="relative mt-3"><Badge tone="amber">Тестовый режим</Badge></div>}
+        <dl className="relative mt-5 grid grid-cols-3 border-t border-line/60 pt-4 text-center">
+          <div><dt className="text-[12.5px] text-muted">Покупок</dt><dd className="num mt-0.5 text-[17px] font-semibold">{me.orders_count}</dd></div>
+          <div className="border-x border-line/60"><dt className="text-[12.5px] text-muted">Потрачено</dt><dd className="num mt-0.5 truncate px-1 text-[17px] font-semibold">{money(me.total_spent)}</dd></div>
+          <div><dt className="text-[12.5px] text-muted">С нами</dt><dd className="mt-0.5 text-[17px] font-semibold">{new Date(me.created_at).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' }).replace(' г.', '')}</dd></div>
+        </dl>
       </section>
 
       {access?.allowed && (

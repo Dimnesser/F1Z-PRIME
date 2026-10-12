@@ -81,7 +81,7 @@ export default function OrderDetail() {
       <section className="fade-in card overflow-hidden">
         <div className="p-5">
           <div className="flex items-center justify-between gap-2">
-            <span className="num font-mono text-[13px] text-muted">Заказ {o.public_id ?? `#${o.id}`}</span>
+            <span className="num font-display text-[13px] text-muted">Заказ {o.public_id ?? `#${o.id}`}</span>
             <OrderStageBadge order={o} />
           </div>
           <h1 className="mt-2 text-[19px] font-bold leading-snug tracking-tight">{o.item_title}</h1>
@@ -117,7 +117,7 @@ export default function OrderDetail() {
           <div className="mt-2.5 space-y-2">
             {o.delivered_items.map((v, i) => (
               <button key={i} type="button" onClick={() => copy(v)} className="pressable flex min-h-[48px] w-full items-center justify-between gap-3 rounded-2xl bg-surface px-3.5 py-3 text-left ring-1 ring-inset ring-line/70">
-                <span className="num min-w-0 break-all font-mono text-[14.5px] font-bold">{v}</span>
+                <span className="num min-w-0 break-all font-display text-[14.5px] font-bold">{v}</span>
                 <Copy className="h-4 w-4 shrink-0 text-success" aria-label="Скопировать" />
               </button>
             ))}
@@ -131,7 +131,7 @@ export default function OrderDetail() {
       {o.delivery_data && (
         <section className="rounded-[20px] border border-success/25 bg-success/[0.06] p-4">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold text-success"><PackageCheck className="h-4 w-4" /> Ваш товар</h2>
-          <div className="mt-2 whitespace-pre-line break-words font-mono text-[15px] font-bold">{o.delivery_data}</div>
+          <div className="mt-2 whitespace-pre-line break-words font-display text-[15px] font-bold">{o.delivery_data}</div>
           <Button size="sm" variant="success" className="mt-3" onClick={() => copy(o.delivery_data ?? '')}>
             <Copy className="h-4 w-4" /> Скопировать
           </Button>

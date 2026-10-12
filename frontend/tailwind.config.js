@@ -14,6 +14,8 @@ export default {
         card: v('surface'),
         line: v('line'),
         ov: v('ov'),
+        // fixed light ink for content on objects that stay dark in both themes (the SIM card, photo overlays)
+        snow: '#F4F6FF',
         primary: { DEFAULT: v('primary'), soft: v('primary-soft'), ink: v('on-primary') },
         accent: v('accent'),
         secondary: { DEFAULT: v('accent'), soft: v('accent') },
@@ -24,9 +26,10 @@ export default {
         danger: v('danger'),
       },
       fontFamily: {
-        sans: ['Onest', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        display: ['Onest', 'system-ui', 'sans-serif'],
-        brand: ['Unbounded', 'Onest', 'sans-serif'],
+        sans: ['Golos Text', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        // numerals with character: balance, prices on hero surfaces, phone numbers, SMS codes
+        display: ['Tektur', 'Golos Text', 'system-ui', 'sans-serif'],
+        brand: ['Unbounded', 'Golos Text', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       fontSize: {

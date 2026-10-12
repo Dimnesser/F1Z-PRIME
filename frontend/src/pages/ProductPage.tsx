@@ -3,6 +3,7 @@ import { ArrowLeft, BadgeCheck, Clock, MessageSquareText, Package, ShieldCheck, 
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StockLabel } from '../components/Cards'
+import { Flag } from '../components/Flag'
 import { GuaranteeCard } from '../components/Guarantee'
 import { Button, EmptyState, ErrorState, IconButton, Skeleton, Stepper } from '../components/ui'
 import { api, ApiError } from '../lib/api'
@@ -45,9 +46,9 @@ export default function ProductPage() {
       <section className="fade-in card relative overflow-hidden p-5">
         <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgb(var(--primary)/0.22),transparent)]" />
         <div className="relative flex items-start gap-4">
-          <div className="grid h-[72px] w-[72px] shrink-0 place-items-center rounded-[22px] bg-ov/[0.05] text-[42px] ring-1 ring-inset ring-line/70">
-            {p.country?.flag ?? <Package className="h-8 w-8 text-primary-soft" />}
-          </div>
+          {p.country ? <Flag code={p.country.code} emoji={p.country.flag} size={64} /> : (
+            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-primary/12 text-primary-soft"><Package className="h-7 w-7" /></div>
+          )}
           <div className="min-w-0 flex-1 pt-1">
             <h1 className="text-[21px] font-bold leading-tight tracking-tight">{p.title}</h1>
             {p.country && <div className="num mt-1 text-[13px] text-muted">Код страны {p.country.dial_code}</div>}
@@ -57,8 +58,8 @@ export default function ProductPage() {
 
         <div className="relative mt-5 flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <div className="eyebrow">Цена за шт.</div>
-            <div className="num mt-1 text-[28px] font-bold leading-none tracking-tight">{money(p.price)}</div>
+            <div className="text-[13px] text-muted">Цена за штуку</div>
+            <div className="num mt-1 font-display text-[32px] font-semibold leading-none">{money(p.price)}</div>
             <div className="num mt-1.5 text-[12.5px] text-muted">
               {p.old_price ? <><s>{money(p.old_price)}</s> · акция </> : null}
               {usd(p.price_usd)}{p.price_usd && p.price_stars && p.stars_enabled ? ' · ' : ''}{p.stars_enabled ? stars(p.price_stars) : ''}
@@ -74,7 +75,7 @@ export default function ProductPage() {
 
       {p.description && (
         <section className="card p-4">
-          <h2 className="eyebrow mb-2">Описание</h2>
+          <h2 className="mb-1.5 text-[15px] font-semibold">Описание</h2>
           <p className="whitespace-pre-line text-[14px] leading-relaxed text-ink/90">{p.description}</p>
         </section>
       )}

@@ -7,6 +7,7 @@ import { money, stars, usd } from '../lib/format'
 import { useConfig, useMe } from '../lib/queries'
 import { haptic, openInvoice } from '../lib/telegram'
 import type { Order, PayMethod, Payment, PremiumNumber, Product, PromoPreview } from '../lib/types'
+import { Flag } from './Flag'
 import { GuaranteeCard } from './Guarantee'
 import { ManualPayment } from './ManualPayment'
 import { PayMethods } from './PayMethods'
@@ -58,7 +59,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
   if (!item) return <Sheet open={false} onClose={onClose}>{null}</Sheet>
 
   const title = item.kind === 'product' ? item.product.title : item.kind === 'premium' ? item.number.display_mask : item.order.item_title
-  const flag = item.kind === 'product' ? item.product.country?.flag : item.kind === 'premium' ? item.number.country?.flag : undefined
+  const country = item.kind === 'product' ? item.product.country : item.kind === 'premium' ? item.number.country : null
   const price = item.kind === 'product' ? item.product.price : item.kind === 'premium' ? item.number.price : item.order.unit_price
   const maxQty = item.kind === 'product' ? Math.min(10, item.product.stock, item.product.max_per_order ?? 10) : 1
   // preview only — the server recalculates price and discount when the order is created
@@ -173,11 +174,11 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
   return (
     <Sheet open={open} onClose={onClose} title={sheetTitle}>
       <div className="mb-4 flex items-center gap-3.5 rounded-[20px] bg-ov/[0.04] p-3 ring-1 ring-inset ring-line/70">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-ov/[0.05] text-[28px] ring-1 ring-inset ring-line/70">
-          {flag ?? <Gem className="h-6 w-6 text-primary-soft" />}
-        </div>
+        {country ? <Flag code={country.code} emoji={country.flag} size={48} /> : (
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary/12 text-primary-soft"><Gem className="h-6 w-6" /></div>
+        )}
         <div className="min-w-0 flex-1">
-          <div className={item.kind === 'premium' ? 'num truncate font-mono text-[16px] font-bold' : 'truncate text-[15px] font-semibold'}>{title}</div>
+          <div className={item.kind === 'premium' ? 'num truncate font-display text-[17px] font-semibold tracking-[0.04em]' : 'truncate text-[15.5px] font-medium'}>{title}</div>
           <div className="num truncate text-[12.5px] text-muted">
             {item.kind === 'product' && <>{item.product.country?.dial_code ?? ''} · {money(price)} / шт{oldPrice ? <s className="ml-1.5 opacity-60">{money(oldPrice)}</s> : null}</>}
             {item.kind === 'premium' && 'Красивый номер · 1 шт'}
@@ -229,7 +230,7 @@ export function CheckoutSheet({ item, onClose }: { item: CheckoutItem | null; on
           {item.kind === 'product' && <GuaranteeCard category={item.product.category} compact />}
           <div className="flex items-end justify-between border-t border-line/60 px-1 pt-4">
             <span className="text-[14px] text-muted">Итого к оплате</span>
-            <span className="num text-[28px] font-bold leading-none tracking-tight">{money(total)}</span>
+            <span className="num font-display text-[30px] font-semibold leading-none">{money(total)}</span>
           </div>
           <div className="flex items-start gap-2.5 rounded-2xl bg-ov/[0.03] p-3 text-[12px] leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
