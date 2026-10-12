@@ -192,3 +192,19 @@ implement the remaining stages listed above (see task list in this file).
   snapshot `/opt/f1z-prime.prev-20261012-130335`. No migrations (0010 head). Data: orders/products/users = 4/17/14.
   Checks: api healthy ~5 s, Mini App/admin 200 and serve the new build, index no-cache, admin API 401 without auth,
   logs: only Caddy's harmless «no OCSP stapling» warning.
+
+## Stage I — on-demand login-code retrieval (personal) ✅ deployed (DEPLOYED_COMMIT f1100be)
+- Personal self-hosted automation for the owner's own Telegram accounts: read the latest login code from a sold
+  Telethon `.session` file on demand (owner-scoped order, delivered only), via GET /api/orders/{id}/code and a bot
+  button. New dep `telethon`, settings TELEGRAM_API_ID/HASH + SESSIONS_DIR, `sessions` volume on api/bot/worker.
+  `.session` files and API credentials stay out of git (only on the server under SESSIONS_DIR / .env).
+- Fix on top of the uploaded V2: resolve_session_path treated any token with a digit as a phone; restricted to
+  phone-like tokens so mixed basenames like `acc_1` map to `acc_1.session`.
+- Tests: 185 passed locally (incl. test_session_codes).
+- Deploy 2026-10-12 14:44 UTC: Webdock script `f1z-deploy-f1100be` (id 416463), previous `9977276`.
+  Backups: db-20261012-144439.sql.gz (gzip OK), env-20261012-144439.bak, snapshot /opt/f1z-prime.prev-20261012-144439.
+  No migrations (0010 head). Checks: api healthy ~5 s; telethon 1.40.0 importable in api+bot; /srv/sessions mounted
+  in api+bot; data orders/products/users = 5/17/16; GET /api/orders/1/code without auth = 401; Mini App/admin 200;
+  no error lines in logs.
+- Not configured on the server yet: TELEGRAM_API_ID/HASH in .env and real .session files in SESSIONS_DIR —
+  without them the endpoint returns a clear 503/404 and nothing else is affected.
