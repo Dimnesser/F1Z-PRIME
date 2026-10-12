@@ -18,7 +18,9 @@ from sqlalchemy import func, select
 
 from app.db import session_factory
 from app.models import (
+    InventoryItem,
     Order,
+    OrderStatus,
     PaymentMethod,
     PremiumNumber,
     PremiumStatus,
@@ -33,9 +35,10 @@ from app.security import TelegramUser
 from app.services import fulfillment
 from app.services import orders as order_service
 from app.services import payments as payment_service
+from app.services import session_codes
 from app.services import telegram as tg_api
 from app.services.common import ServiceError
-from bot.keyboards import back, main_menu, menu_row, rows, webapp_button
+from bot.keyboards import back, main_menu, menu_row, order_actions, rows, webapp_button
 
 log = logging.getLogger("f1z.bot")
 router = Router(name="main")
@@ -313,11 +316,29 @@ async def buy(cb: CallbackQuery) -> None:
         await fulfillment.run_now(order.id)  # instant delivery; the worker job is the durable fallback
         async with session_factory()() as session:
             order = await session.get(Order, order.id) or order  # type: ignore[assignment]
-    await _edit_or_send(cb, _order_text(order, paid_now=True), rows([_orders_btn()], menu_row()))
+    await _edit_or_send(cb, _order_text(order, paid_now=True), await _order_reply_kb(order))
 
 
 def _orders_btn() -> InlineKeyboardButton:
     return InlineKeyboardButton(text="📦 Мои покупки", callback_data="orders")
+
+
+async def _order_has_session(order: Order) -> bool:
+    if order.status != OrderStatus.completed or order.fulfillment_status != "delivered":
+        return False
+    async with session_factory()() as session:
+        n = await session.scalar(
+            select(func.count(InventoryItem.id)).where(
+                InventoryItem.order_id == order.id, InventoryItem.status == "sold"
+            )
+        )
+    return (n or 0) > 0
+
+
+async def _order_reply_kb(order: Order):
+    if await _order_has_session(order):
+        return order_actions(order.id, with_login_code=True)
+    return rows([_orders_btn()], menu_row())
 
 
 def _order_text(order: Order, paid_now: bool = False) -> str:
@@ -444,7 +465,33 @@ async def show_order(cb: CallbackQuery) -> None:
     if order is None or order.user_id != user.id:
         await cb.answer("Заказ не найден", show_alert=True)
         return
-    await _edit_or_send(cb, _order_text(order), rows(back("orders"), menu_row()))
+    await _edit_or_send(
+        cb, _order_text(order), order_actions(order.id, with_login_code=await _order_has_session(order))
+    )
+
+
+@router.callback_query(F.data.startswith("ocode:"))
+async def order_login_code(cb: CallbackQuery) -> None:
+    """Buyer asks for the Telegram login code from the sold .session of this order."""
+    oid = int(cb.data.split(":")[1])  # type: ignore[union-attr]
+    user = await _get_user(cb.from_user)
+    await cb.answer("Ищем код…")
+    async with session_factory()() as session:
+        try:
+            result = await session_codes.code_for_order(session, oid, user.id)
+        except ServiceError as exc:
+            await cb.message.answer(f"⚠️ {esc(exc.message)}")  # type: ignore[union-attr]
+            return
+    code = result["code"] or ""
+    text = (
+        f"🔐 <b>Код входа для заказа #{oid}</b>\n\n"
+        f"<code>{esc(code)}</code>\n\n"
+        "Нажмите на код, чтобы скопировать. Код действует короткое время — введите его сразу."
+    )
+    await cb.message.answer(  # type: ignore[union-attr]
+        text,
+        reply_markup=order_actions(oid, with_login_code=True),
+    )
 
 
 # ----------------------------------------------------------------- support
@@ -552,7 +599,7 @@ async def successful_payment(message: Message) -> None:
             await fulfillment.run_now(order.id)
             async with session_factory()() as session:
                 order = await session.get(Order, order.id) or order
-        await message.answer(_order_text(order, paid_now=True), reply_markup=rows([_orders_btn()], menu_row()))
+        await message.answer(_order_text(order, paid_now=True), reply_markup=await _order_reply_kb(order))
     else:
         await message.answer(
             f"✅ Баланс пополнен на <b>{fmt_money(payment.amount)} грн</b>", reply_markup=rows(menu_row())

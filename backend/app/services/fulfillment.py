@@ -9,7 +9,8 @@ Modes (per product, set in the admin panel):
   manual  — an operator task is created (e.g. virtual numbers, anything that needs a human);
   review  — the order is held for a manual check first.
 Premium numbers are revealed to the buyer at payment time (existing behaviour).
-Selling or transferring Telegram accounts/sessions/login codes is never automated.
+Login codes for sold Telethon .session inventory are fetched on demand via
+``session_codes`` (buyer button / GET /api/orders/{id}/code), not during fulfill.
 """
 from __future__ import annotations
 

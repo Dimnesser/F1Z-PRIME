@@ -137,6 +137,14 @@ class OrderDetailOut(OrderOut):
     # what delivered_items are, so the buyer sees the right label: "phone" | "secret" | None
     delivered_kind: str | None = None
     support_ticket_id: int | None = None
+    # True when the order has sold inventory units that can yield a Telegram login code
+    login_code_available: bool = False
+
+
+class LoginCodeOut(BaseModel):
+    code: str
+    order_id: int
+    source: str | None = None
 
 
 class OrderCreate(BaseModel):

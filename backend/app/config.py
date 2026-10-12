@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     sms_source: str = "provider"
     # shared secret the operator's own SMS gateway presents to the ingest webhook (never in git)
     sms_gateway_token: str = ""
+    # Telethon (my.telegram.org) — used to read login codes from sold .session files
+    telegram_api_id: int = 0
+    telegram_api_hash: str = ""
+    # Directory with Telethon .session files (basename = digits from inventory secret)
+    sessions_dir: str = "/srv/sessions"
     admin_username: str = "admin"
     admin_password: str = ""  # plain (dev) — prefer ADMIN_PASSWORD_HASH in production
     admin_password_hash: str = ""  # pbkdf2_sha256:iterations:salt:hash
@@ -46,6 +51,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     log_level: str = "INFO"
     run_background_tasks: bool = True
+
+    @field_validator("telegram_api_id", mode="before")
+    @classmethod
+    def _api_id(cls, v: object) -> object:
+        if v is None or v == "":
+            return 0
+        return v
 
     @field_validator("environment")
     @classmethod

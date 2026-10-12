@@ -32,6 +32,7 @@ from app.models import (
 )
 from app.schemas import (
     CountryCatalogOut,
+    LoginCodeOut,
     ManualSubmit,
     MessageCreate,
     OrderCreate,
@@ -56,6 +57,7 @@ from app.services import settings as settings_service
 from app.services import fulfillment, inventory, monitor, notifications
 from app.services import promo as promo_service
 from app.services import rules
+from app.services import session_codes
 from app.services import support as support_service
 from app.services.common import utcnow
 
@@ -365,6 +367,7 @@ async def _order_detail(session: SessionDep, order: Order) -> OrderDetailOut:
             )
         ).all()
         data.delivered_items = inventory.delivered_secrets(list(units))
+        data.login_code_available = bool(units)
         phone_rows = (
             await session.scalars(
                 select(PhoneInventory)
@@ -393,6 +396,13 @@ async def order_detail(order_id: int, user: UserDep, session: SessionDep) -> Ord
     if order is None or order.user_id != user.id:
         raise HTTPException(404, "Заказ не найден")
     return await _order_detail(session, order)
+
+
+@router.get("/orders/{order_id}/code", response_model=LoginCodeOut)
+async def order_login_code(order_id: int, user: UserDep, session: SessionDep) -> LoginCodeOut:
+    """Read the latest Telegram login code from the sold .session linked to this order."""
+    result = await session_codes.code_for_order(session, order_id, user.id)
+    return LoginCodeOut(code=result["code"] or "", order_id=order_id, source=result.get("source"))
 
 
 @router.post("/orders/{order_id}/pay", response_model=PayResponse)
