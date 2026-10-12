@@ -199,6 +199,9 @@ class SmsActivateProvider(ActivationProvider):
 
 def get_provider() -> ActivationProvider:
     s = get_settings()
+    if s.sms_source == "owned":
+        from app.services.owned_sms import OwnedPoolProvider  # lazy: avoids import cycle
+        return OwnedPoolProvider()
     if s.sms_activate_api_key:
         return SmsActivateProvider(s.sms_activate_api_key, s.sms_activate_base_url)
     return _MOCK

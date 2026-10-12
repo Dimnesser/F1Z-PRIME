@@ -300,11 +300,13 @@ async def task_sms_outbox() -> str:
 
 
 async def task_sms_restore() -> str:
-    """Recover SMS activations stranded by a crash (charged but never resolved) via safe reconciliation."""
+    """Recover SMS activations stranded by a crash, and free owned-pool numbers with no in-flight activation."""
+    from app.services import owned_sms
     async with session_factory()() as session:
         n = await sms.restore_pending(session)
+        freed = await owned_sms.release_orphans(session)
         await session.commit()
-    return f"restored {n}"
+    return f"restored {n}, freed {freed}"
 
 
 async def task_backup() -> str:

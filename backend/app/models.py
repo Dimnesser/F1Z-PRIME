@@ -859,3 +859,46 @@ class DeliveryOutbox(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OwnedSmsNumber(Base):
+    """A number the operator owns and rents out to receive one registration SMS for the buyer's own signup.
+
+    Numbers only — no Telegram session/.session/TData is ever stored here.
+    """
+
+    __tablename__ = "owned_sms_numbers"
+    __table_args__ = (
+        Index("ix_owned_sms_available_py", "country_iso2", "service"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    phone_e164: Mapped[str] = mapped_column(String(24), unique=True, nullable=False)
+    country_iso2: Mapped[str] = mapped_column(String(2), default="", server_default="", nullable=False)
+    service: Mapped[str] = mapped_column(String(32), default="", server_default="", nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    in_use: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    times_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    added_by: Mapped[str] = mapped_column(String(64), default="", server_default="", nullable=False)
+    note: Mapped[str] = mapped_column(String(255), default="", server_default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OwnedSmsInbox(Base):
+    """Incoming SMS deposited by the operator's own gateway for an owned number (one registration code)."""
+
+    __tablename__ = "owned_sms_inbox"
+    __table_args__ = (
+        Index("ix_owned_sms_inbox_phone_py", "phone_e164", "consumed"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    number_id: Mapped[int | None] = mapped_column(ForeignKey("owned_sms_numbers.id", ondelete="CASCADE"))
+    phone_e164: Mapped[str] = mapped_column(String(24), nullable=False)
+    text: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    code: Mapped[str | None] = mapped_column(String(16))
+    activation_id: Mapped[int | None] = mapped_column(ForeignKey("sms_activations.id", ondelete="SET NULL"))
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

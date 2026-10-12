@@ -4,13 +4,14 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep
+from app.config import get_settings
 from app.models import SmsActivation
-from app.services import sms
+from app.services import owned_sms, sms
 from app.services import settings as settings_service
 
 router = APIRouter(prefix="/api/sms", tags=["sms"])
@@ -124,3 +125,24 @@ async def sms_activation_cancel(activation_id: int, user: UserDep, session: Sess
     res = await sms.cancel(session, activation_id, actor=f"user:{user.id}")
     await session.commit()
     return sms.out(res)
+
+
+class GatewaySmsIn(BaseModel):
+    phone: str = Field(min_length=3, max_length=24)
+    text: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/gateway/incoming")
+async def gateway_incoming(body: GatewaySmsIn, session: SessionDep,
+                           x_gateway_token: str = Header(default="")) -> dict:
+    """Ingest an incoming SMS the operator's OWN gateway forwards for one of the owned numbers.
+
+    Auth is a shared secret (X-Gateway-Token) from .env — not a user endpoint. Numbers only; this never
+    handles Telegram sessions or login codes for pre-existing accounts.
+    """
+    token = get_settings().sms_gateway_token
+    if not token or x_gateway_token != token:
+        raise HTTPException(401, "bad gateway token")
+    row = await owned_sms.ingest(session, body.phone.strip(), body.text)
+    await session.commit()
+    return {"stored": True, "code_parsed": bool(row.code)}

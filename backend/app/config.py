@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # SMS-activation provider (sms-activate.org). Key lives only in .env on the server, never in git.
     sms_activate_api_key: str = ""
     sms_activate_base_url: str = "https://api.sms-activate.org/stubs/handler_api.php"
+    # number source for SMS-activations: "provider" (sms-activate) or "owned" (operator's own pool + gateway)
+    sms_source: str = "provider"
+    # shared secret the operator's own SMS gateway presents to the ingest webhook (never in git)
+    sms_gateway_token: str = ""
     admin_username: str = "admin"
     admin_password: str = ""  # plain (dev) — prefer ADMIN_PASSWORD_HASH in production
     admin_password_hash: str = ""  # pbkdf2_sha256:iterations:salt:hash

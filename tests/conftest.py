@@ -35,6 +35,7 @@ from app.db import dispose_engine, session_factory  # noqa: E402
 from app.security import sign_init_data  # noqa: E402
 
 TABLES = [
+    "owned_sms_inbox", "owned_sms_numbers",
     "delivery_outbox", "sms_activations",
     "phone_verifications", "phone_inventory",
     "rule_runs", "automation_rules", "promo_redemptions", "promo_codes", "price_history",
@@ -85,6 +86,15 @@ async def clean_db():
     yield
     await dispose_engine()
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_sms_catalog_cache():
+    """The SMS provider catalog is process-cached (TTL); reset it per test to avoid cross-test bleed."""
+    from app.services import sms
+    sms._catalog_cache.update(at=0.0, data=None)
+    yield
+    sms._catalog_cache.update(at=0.0, data=None)
 
 
 @pytest.fixture(autouse=True)

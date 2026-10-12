@@ -11,9 +11,9 @@ from sqlalchemy import func, select
 
 from app.api.deps import SessionDep
 from app.api.deps import perm as P
-from app.models import SmsActivation
+from app.models import OwnedSmsNumber, SmsActivation
 from app.services import sms
-from app.services.common import lock, log_admin
+from app.services.common import lock, log_admin, money
 
 router = APIRouter(prefix="/api/admin/sms", tags=["admin"])
 
@@ -103,3 +103,92 @@ async def admin_cancel(row_id: int, admin: P("orders.fulfill"), session: Session
     log_admin(session, admin, "sms_cancel", "sms_activation", row_id)
     await session.commit()
     return sms.out(res)
+
+
+# ---------------------------------------------------------------- owned-number pool (operator's own numbers)
+
+
+class PoolAddIn(BaseModel):
+    phones: str = Field(min_length=3, max_length=200_000)  # one E.164 number per line
+    country_iso2: str = Field(default="", max_length=2)
+    service: str = Field(default="", max_length=32)
+    price: float = Field(ge=0)
+    note: str = Field(default="", max_length=255)
+
+
+class PoolPatchIn(BaseModel):
+    is_active: bool | None = None
+    price: float | None = Field(default=None, ge=0)
+
+
+@router.get("/pool")
+async def pool_list(_: P("products.view"), session: SessionDep,
+                    country: str | None = Query(None, max_length=2),
+                    available: bool | None = None,
+                    page: int = Query(1, ge=1), size: int = Query(100, ge=1, le=500)) -> dict:
+    stmt = select(OwnedSmsNumber)
+    if country:
+        stmt = stmt.where(OwnedSmsNumber.country_iso2 == country.upper())
+    if available is True:
+        stmt = stmt.where(OwnedSmsNumber.is_active.is_(True), OwnedSmsNumber.in_use.is_(False))
+    total = await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = (await session.scalars(stmt.order_by(OwnedSmsNumber.id.desc()).offset((page - 1) * size).limit(size))).all()
+    return {"total": total, "items": [
+        {"id": n.id, "phone_e164": n.phone_e164, "country_iso2": n.country_iso2, "service": n.service,
+         "price": float(n.price), "is_active": n.is_active, "in_use": n.in_use, "times_used": n.times_used,
+         "note": n.note} for n in rows]}
+
+
+@router.post("/pool")
+async def pool_add(body: PoolAddIn, admin: P("products.stock"), session: SessionDep) -> dict:
+    from app.services import phones as phones_service
+
+    lines = [ln.strip() for ln in body.phones.splitlines() if ln.strip()]
+    added = duplicates = invalid = 0
+    seen: set[str] = set()
+    for raw in lines[:5000]:
+        norm = phones_service.normalize_raw(raw)
+        if not norm or len(norm) < 6:
+            invalid += 1
+            continue
+        if norm in seen:
+            duplicates += 1
+            continue
+        seen.add(norm)
+        exists = await session.scalar(select(OwnedSmsNumber.id).where(OwnedSmsNumber.phone_e164 == norm))
+        if exists:
+            duplicates += 1
+            continue
+        session.add(OwnedSmsNumber(phone_e164=norm, country_iso2=body.country_iso2.upper(), service=body.service,
+                                   price=money(body.price), added_by=str(admin)[:64], note=body.note))
+        added += 1
+    log_admin(session, admin, "sms_pool_add", "owned_sms", None, added=added, duplicates=duplicates, invalid=invalid)
+    await session.commit()
+    return {"added": added, "duplicates": duplicates, "invalid": invalid}
+
+
+@router.patch("/pool/{number_id}")
+async def pool_patch(number_id: int, body: PoolPatchIn, admin: P("products.stock"), session: SessionDep) -> dict:
+    num = await lock(session, OwnedSmsNumber, number_id)
+    if num is None:
+        raise HTTPException(404, "Номер не найден")
+    if body.is_active is not None:
+        num.is_active = body.is_active
+    if body.price is not None:
+        num.price = money(body.price)
+    log_admin(session, admin, "sms_pool_patch", "owned_sms", number_id)
+    await session.commit()
+    return {"id": num.id, "is_active": num.is_active, "price": float(num.price)}
+
+
+@router.delete("/pool/{number_id}")
+async def pool_delete(number_id: int, admin: P("products.stock"), session: SessionDep) -> dict:
+    num = await lock(session, OwnedSmsNumber, number_id)
+    if num is None:
+        raise HTTPException(404, "Номер не найден")
+    if num.in_use:
+        raise HTTPException(409, "Номер сейчас арендован — дождитесь завершения активации")
+    await session.delete(num)
+    log_admin(session, admin, "sms_pool_delete", "owned_sms", number_id)
+    await session.commit()
+    return {"deleted": True}
