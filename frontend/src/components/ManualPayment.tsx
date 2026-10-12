@@ -27,22 +27,24 @@ export function ManualPayment({ payment, instructions, onSubmitted }: { payment:
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-secondary/20 bg-secondary/[0.06] p-4">
-        <div className="text-[12px] font-semibold uppercase tracking-wider text-secondary">Сумма к оплате</div>
-        <div className="mt-1 font-display text-2xl font-bold">{money(payment.amount)}</div>
+      <div className="rounded-2xl border border-accent/25 bg-accent/[0.06] p-4">
+        <div className="eyebrow text-accent">Сумма к оплате</div>
+        <div className="num mt-1 text-[26px] font-bold tracking-tight">{money(payment.amount)}</div>
         <p className="mt-3 whitespace-pre-line text-[13.5px] leading-relaxed text-ink/85">{instructions}</p>
         <button
           onClick={() => {
             navigator.clipboard?.writeText(ref)
             toast('Номер платежа скопирован', 'success')
           }}
-          className="mt-3 flex w-full items-center justify-between rounded-xl bg-white/[0.06] px-3.5 py-2.5 text-sm pressable"
+          type="button"
+          className="mt-3 flex min-h-[44px] w-full items-center justify-between rounded-xl bg-ov/[0.06] px-3.5 py-2.5 text-sm pressable"
         >
           <span className="text-muted">Комментарий к переводу</span>
           <span className="flex items-center gap-1.5 font-mono font-bold">{ref} <Copy className="h-3.5 w-3.5 text-muted" /></span>
         </button>
       </div>
       <textarea
+        aria-label="Комментарий к платежу"
         className="input min-h-[84px] resize-none"
         placeholder="Последние 4 цифры карты, время перевода…"
         maxLength={500}

@@ -1,44 +1,54 @@
 /** @type {import('tailwindcss').Config} */
+// Colors come from CSS variables (RGB channels) defined in src/index.css, so Tailwind opacity
+// modifiers work and the whole palette switches between the dark and light theme in one place.
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`
+
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        bg: '#09090F',
-        surface: '#12121C',
-        card: '#191925',
-        line: 'rgba(255,255,255,0.07)',
-        primary: { DEFAULT: '#8B5CF6', soft: '#A78BFA', deep: '#6D28D9' },
-        secondary: { DEFAULT: '#22D3EE', soft: '#67E8F9' },
-        ink: '#F8FAFC',
-        muted: '#9494A8',
-        success: '#34D399',
-        warning: '#FBBF24',
-        danger: '#F87171',
+        bg: v('bg'),
+        surface: v('surface'),
+        elevated: v('elevated'),
+        card: v('surface'),
+        line: v('line'),
+        ov: v('ov'),
+        primary: { DEFAULT: v('primary'), soft: v('primary-soft'), ink: v('on-primary') },
+        accent: v('accent'),
+        secondary: { DEFAULT: v('accent'), soft: v('accent') },
+        ink: v('ink'),
+        muted: v('muted'),
+        success: v('success'),
+        warning: v('warning'),
+        danger: v('danger'),
       },
       fontFamily: {
-        sans: ['Manrope', 'system-ui', 'sans-serif'],
-        display: ['Unbounded', 'Manrope', 'sans-serif'],
+        sans: ['Onest', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['Onest', 'system-ui', 'sans-serif'],
+        brand: ['Unbounded', 'Onest', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+      fontSize: {
+        '2xs': ['11px', '14px'],
       },
       borderRadius: { xl2: '20px', '4xl': '28px' },
       boxShadow: {
-        glow: '0 10px 40px -10px rgba(139,92,246,0.55)',
-        'glow-cyan': '0 10px 40px -12px rgba(34,211,238,0.45)',
-        card: '0 1px 0 0 rgba(255,255,255,0.05) inset, 0 20px 40px -24px rgba(0,0,0,0.8)',
+        card: 'var(--shadow-card)',
+        pop: 'var(--shadow-pop)',
+        glow: '0 10px 30px -12px rgb(var(--primary) / 0.55)',
+        'glow-accent': '0 10px 30px -14px rgb(var(--accent) / 0.5)',
       },
       backgroundImage: {
-        brand: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 45%, #22D3EE 100%)',
-        'brand-soft': 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(34,211,238,0.10))',
+        brand: 'linear-gradient(135deg, rgb(var(--primary)) 0%, #5B6CFF 55%, rgb(var(--accent)) 130%)',
+        'brand-soft': 'linear-gradient(135deg, rgb(var(--primary) / 0.16), rgb(var(--accent) / 0.08))',
       },
+      transitionTimingFunction: { out: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
       keyframes: {
         shimmer: { '100%': { transform: 'translateX(100%)' } },
-        float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-6px)' } },
-        'spin-slow': { to: { transform: 'rotate(360deg)' } },
       },
       animation: {
         shimmer: 'shimmer 1.6s infinite',
-        float: 'float 5s ease-in-out infinite',
-        'spin-slow': 'spin-slow 14s linear infinite',
       },
     },
   },

@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Globe2, Minus, Plus } from 'lucide-react'
+import { ChevronRight, Globe2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
@@ -7,7 +7,7 @@ import { useConfig } from '../lib/queries'
 import { haptic } from '../lib/telegram'
 import { Sheet } from './Sheet'
 import { useToast } from './Toast'
-import { Button } from './ui'
+import { Button, Stepper } from './ui'
 
 /** «Нет нужной страны?» — a support ticket for the operator. No payment is taken until the shop confirms. */
 export function CountryRequestButton() {
@@ -16,13 +16,14 @@ export function CountryRequestButton() {
   if (data?.settings.country_requests_enabled === 'false') return null
   return (
     <>
-      <button onClick={() => { setOpen(true); haptic.select() }}
-        className="card mt-3 flex w-full items-center gap-3 p-4 text-left pressable">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-secondary/15 text-secondary"><Globe2 className="h-5 w-5" /></div>
+      <button type="button" onClick={() => { setOpen(true); haptic.select() }}
+        className="card flex w-full items-center gap-3 p-4 text-left pressable">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent/12 text-accent"><Globe2 className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold">Нет нужной страны?</div>
+          <div className="text-[15px] font-semibold">Нет нужной страны?</div>
           <div className="text-[12.5px] text-muted">Оставьте запрос — оператор проверит наличие и цену</div>
         </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
       </button>
       <CountryRequestSheet open={open} onClose={() => setOpen(false)} />
     </>
@@ -62,13 +63,9 @@ function CountryRequestSheet({ open, onClose }: { open: boolean; onClose: () => 
           <span className="mb-1.5 block text-[13px] font-semibold text-muted">Страна</span>
           <input className="input" maxLength={60} placeholder="Например, Казахстан или +7 7xx" value={country} onChange={(e) => setCountry(e.target.value)} />
         </label>
-        <div className="flex items-center justify-between rounded-2xl bg-card p-3.5 ring-1 ring-white/[0.06]">
-          <span className="text-sm font-semibold text-muted">Количество</span>
-          <div className="flex items-center gap-3">
-            <button aria-label="Меньше" className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.07] pressable disabled:opacity-40" disabled={qty <= 1} onClick={() => setQty(qty - 1)}><Minus className="h-4 w-4" /></button>
-            <span className="w-8 text-center font-display text-lg font-bold">{qty}</span>
-            <button aria-label="Больше" className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.07] pressable disabled:opacity-40" disabled={qty >= 100} onClick={() => setQty(qty + 1)}><Plus className="h-4 w-4" /></button>
-          </div>
+        <div className="flex items-center justify-between rounded-[20px] bg-ov/[0.04] py-1.5 pl-4 pr-1.5 ring-1 ring-inset ring-line/70">
+          <span className="text-[14px] font-medium text-muted">Количество</span>
+          <Stepper value={qty} max={100} onChange={setQty} />
         </div>
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-semibold text-muted">Комментарий (необязательно)</span>

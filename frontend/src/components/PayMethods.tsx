@@ -1,14 +1,13 @@
 import clsx from 'clsx'
-import { motion } from 'framer-motion'
-import { CreditCard, FlaskConical, Star, Wallet } from 'lucide-react'
+import { ChevronRight, CreditCard, FlaskConical, Star, Wallet } from 'lucide-react'
 import { money } from '../lib/format'
 import type { PayMethod } from '../lib/types'
 
 const META: Record<PayMethod, { title: string; icon: typeof Wallet; tint: string }> = {
-  balance: { title: 'С баланса', icon: Wallet, tint: 'text-primary-soft bg-primary/15' },
-  stars: { title: 'Telegram Stars', icon: Star, tint: 'text-amber-300 bg-amber-400/15' },
-  manual: { title: 'Перевод на карту', icon: CreditCard, tint: 'text-secondary bg-secondary/15' },
-  test: { title: 'Тестовая оплата', icon: FlaskConical, tint: 'text-warning bg-warning/15' },
+  balance: { title: 'С баланса', icon: Wallet, tint: 'text-primary-soft bg-primary/12' },
+  stars: { title: 'Telegram Stars', icon: Star, tint: 'text-warning bg-warning/12' },
+  manual: { title: 'Перевод на карту', icon: CreditCard, tint: 'text-accent bg-accent/12' },
+  test: { title: 'Тестовая оплата', icon: FlaskConical, tint: 'text-warning bg-warning/12' },
 }
 
 export function PayMethods({
@@ -38,33 +37,33 @@ export function PayMethods({
         if (m === 'manual') hint = `К переводу ${money(total)} · подтверждает администратор`
         if (m === 'test') hint = 'Только DEV_MODE — деньги не списываются'
         return (
-          <motion.button
+          <button
+            type="button"
             key={m}
             style={{ animationDelay: `${i * 50}ms` }}
-            whileTap={{ scale: 0.98 }}
             disabled={loading !== null || notEnough}
             onClick={() => onPick(m)}
             className={clsx(
-              'fade-in flex w-full items-center gap-3.5 rounded-2xl border p-3.5 text-left transition [animation-fill-mode:backwards]',
-              m === 'test' ? 'border-dashed border-warning/40 bg-warning/[0.04]' : 'border-white/[0.07] bg-card',
-              notEnough && 'opacity-50',
+              'fade-in pressable flex w-full items-center gap-3.5 rounded-[18px] border p-3.5 text-left [animation-fill-mode:backwards] disabled:cursor-not-allowed',
+              m === 'test' ? 'border-dashed border-warning/40 bg-warning/[0.04]' : 'border-line bg-surface hover:border-primary/40',
+              notEnough && 'opacity-55',
             )}
           >
             <div className={clsx('grid h-11 w-11 place-items-center rounded-xl', meta.tint)}>
               <Icon className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-bold">{meta.title}</div>
+              <div className="text-[15px] font-semibold">{meta.title}</div>
               <div className={clsx('text-[12.5px]', notEnough ? 'text-danger' : 'text-muted')}>
                 {notEnough ? 'Недостаточно средств' : hint}
               </div>
             </div>
             {loading === m ? (
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-ov/20 border-t-primary" aria-label="Загрузка" />
             ) : (
-              <div className="h-5 w-5 rounded-full border-2 border-white/15" />
+              <ChevronRight className="h-5 w-5 text-muted" />
             )}
-          </motion.button>
+          </button>
         )
       })}
     </div>
