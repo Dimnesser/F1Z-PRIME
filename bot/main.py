@@ -33,6 +33,7 @@ async def setup_bot(bot: Bot) -> None:
             BotCommand(command="profile", description="👤 Профиль"),
             BotCommand(command="balance", description="💳 Баланс"),
             BotCommand(command="orders", description="📦 Мои покупки"),
+            BotCommand(command="sms", description="📱 Купить номер"),
             BotCommand(command="support", description="🆘 Поддержка"),
         ]
     )

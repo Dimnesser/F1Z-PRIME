@@ -524,3 +524,183 @@ async def successful_payment(message: Message) -> None:
 @router.message()
 async def fallback(message: Message) -> None:
     await message.answer("Не понял команду 🤔 Воспользуйтесь меню:", reply_markup=main_menu())
+
+
+# --------------------------------------------------------------- SMS-activations (buy a virtual number)
+
+from app.models import SmsActivation  # noqa: E402
+from app.services import sms as sms_service  # noqa: E402
+from app.services import settings as settings_service  # noqa: E402
+
+_SMS_LABEL = {
+    "RESERVED": "резерв", "API_PENDING": "запрос номера", "WAITING": "⏳ ожидает SMS",
+    "COMPLETED": "✅ код получен", "CANCEL_REQUESTED": "отмена…", "CANCELLED": "отменён",
+    "TIMEOUT": "⌛ истёк", "FAILED": "ошибка", "RECONCILIATION_REQUIRED": "на проверке у оператора",
+}
+
+
+def _sms_status_kb(act: SmsActivation) -> object:
+    buttons: list[list[InlineKeyboardButton]] = []
+    if act.status in ("WAITING", "API_PENDING", "RESERVED"):
+        buttons.append([
+            InlineKeyboardButton(text="🔄 Обновить", callback_data=f"sms:st:{act.id}"),
+            InlineKeyboardButton(text="❌ Отменить", callback_data=f"sms:x:{act.id}"),
+        ])
+    else:
+        buttons.append([InlineKeyboardButton(text="🔄 Обновить", callback_data=f"sms:st:{act.id}")])
+    buttons.append(menu_row())
+    return rows(*buttons)
+
+
+def _sms_card(act: SmsActivation) -> str:
+    lines = [
+        "📱 <b>SMS-активация</b>",
+        f"Номер: <code>{esc(act.phone_number or '—')}</code>",
+        f"Страна/сервис: {esc(act.country)} · {esc(act.service)}",
+        f"Статус: <b>{_SMS_LABEL.get(act.status, act.status)}</b>",
+    ]
+    if act.code:
+        lines.append(f"Код: <code>{esc(act.code)}</code>")
+    if act.status == "WAITING" and act.expires_at:
+        lines.append(f"Действует до: {act.expires_at:%H:%M}")
+    if act.status in ("CANCELLED", "TIMEOUT") and act.refunded:
+        lines.append(f"💸 Возврат {fmt_money(act.cost)} грн на баланс")
+    return "\n".join(lines)
+
+
+@router.message(Command("sms"))
+@router.callback_query(F.data == "sms:menu")
+async def sms_menu(event: Message | CallbackQuery) -> None:
+    async with session_factory()() as session:
+        if not await settings_service.get_bool(session, "sms_enabled"):
+            await _edit_or_send(event, "📱 Продажа виртуальных номеров временно недоступна.", rows(menu_row()))
+            return
+        try:
+            cat = await sms_service.catalog(session)
+        except (sms_service.ProviderTimeout, sms_service.ProviderError):
+            await _edit_or_send(event, "⚠️ Сервис номеров временно недоступен. Попробуйте позже.", rows(menu_row()))
+            return
+    if not cat["configured"] or not cat["items"]:
+        await _edit_or_send(event, "📱 Сейчас нет доступных номеров. Загляните позже.", rows(menu_row()))
+        return
+    titles = {c["code"]: c["title"] for c in cat["countries"]}
+    counts: dict[str, int] = {}
+    for i in cat["items"]:
+        counts[i["country"]] = counts.get(i["country"], 0) + i["count"]
+    btns = [[InlineKeyboardButton(text=f"{esc(titles.get(c, c))} · {n} шт", callback_data=f"sms:c:{c}")]
+            for c, n in sorted(counts.items(), key=lambda x: -x[1])[:20]]
+    await _edit_or_send(event, "📱 <b>Выберите страну</b>", rows(*btns, menu_row()))
+
+
+@router.callback_query(F.data.startswith("sms:c:"))
+async def sms_country(event: CallbackQuery) -> None:
+    country = event.data.split(":", 2)[2]  # type: ignore[union-attr]
+    async with session_factory()() as session:
+        try:
+            cat = await sms_service.catalog(session)
+        except (sms_service.ProviderTimeout, sms_service.ProviderError):
+            await _edit_or_send(event, "⚠️ Сервис номеров временно недоступен.", rows(menu_row()))
+            return
+    svc_titles = {s["code"]: s["title"] for s in cat["services"]}
+    items = [i for i in cat["items"] if i["country"] == country]
+    if not items:
+        await _edit_or_send(event, "Нет доступных сервисов для этой страны.", rows([InlineKeyboardButton(text="⬅️ Страны", callback_data="sms:menu")], menu_row()))
+        return
+    btns = [[InlineKeyboardButton(text=f"{esc(svc_titles.get(i['service'], i['service']))} · {fmt_money(i['price'])} грн · {i['count']} шт",
+                                  callback_data=f"sms:b:{country}:{i['service']}")] for i in items[:20]]
+    await _edit_or_send(event, "📱 <b>Выберите сервис</b>", rows(*btns, [InlineKeyboardButton(text="⬅️ Страны", callback_data="sms:menu")], menu_row()))
+
+
+@router.callback_query(F.data.startswith("sms:b:"))
+async def sms_confirm(event: CallbackQuery) -> None:
+    _, _, country, service = event.data.split(":", 3)  # type: ignore[union-attr]
+    async with session_factory()() as session:
+        try:
+            cat = await sms_service.catalog(session)
+        except (sms_service.ProviderTimeout, sms_service.ProviderError):
+            await _edit_or_send(event, "⚠️ Сервис номеров временно недоступен.", rows(menu_row()))
+            return
+    item = next((i for i in cat["items"] if i["country"] == country and i["service"] == service), None)
+    if item is None:
+        await _edit_or_send(event, "Эта позиция больше недоступна.", rows([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"sms:c:{country}")], menu_row()))
+        return
+    text = (f"📱 <b>Покупка номера</b>\n\nСтрана: {esc(country)}\nСервис: {esc(service)}\n"
+            f"Цена: <b>{fmt_money(item['price'])} грн</b>\n\nНомер получит один SMS-код. Подтвердить?")
+    await _edit_or_send(event, text, rows(
+        [InlineKeyboardButton(text="✅ Купить", callback_data=f"sms:go:{country}:{service}")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"sms:c:{country}")], menu_row()))
+
+
+@router.callback_query(F.data.startswith("sms:go:"))
+async def sms_buy(event: CallbackQuery) -> None:
+    if event.from_user is None:
+        return
+    _, _, country, service = event.data.split(":", 3)  # type: ignore[union-attr]
+    user = await _get_user(event.from_user)
+    async with session_factory()() as session:
+        if not await settings_service.get_bool(session, "sms_enabled"):
+            await _edit_or_send(event, "📱 Продажа номеров отключена.", rows(menu_row()))
+            return
+        # an in-flight activation? show it instead of buying twice (double-tap safe)
+        existing = await session.scalar(
+            select(SmsActivation).where(SmsActivation.user_id == user.id, SmsActivation.status.in_(sms_service.ACTIVE))
+            .order_by(SmsActivation.id.desc()).limit(1))
+        if existing is not None:
+            await _edit_or_send(event, _sms_card(existing), _sms_status_kb(existing))
+            return
+        try:
+            raw = await sms_service.provider_catalog(session)
+        except (sms_service.ProviderTimeout, sms_service.ProviderError):
+            await _edit_or_send(event, "⚠️ Сервис номеров временно недоступен.", rows(menu_row()))
+            return
+        info = raw["prices"].get(country, {}).get(service)
+        if info is None or info["count"] <= 0:
+            await _edit_or_send(event, "Номера закончились. Выберите другую позицию.", rows([InlineKeyboardButton(text="⬅️ Страны", callback_data="sms:menu")], menu_row()))
+            return
+        m = await sms_service._markups(session)
+        try:
+            price = sms_service.quote(info["cost"], country, service, m)
+            act = await sms_service.buy(session, user.id, user.telegram_id, service=service, country=country,
+                                        cost=price, provider_cost=info["cost"])
+            await session.commit()
+        except ServiceError as exc:
+            await session.rollback()
+            msg = "💳 Недостаточно средств на балансе. Пополните баланс." if exc.code == "insufficient_funds" else f"⚠️ {exc.message}"
+            await _edit_or_send(event, msg, rows(menu_row()))
+            return
+        await _edit_or_send(event, _sms_card(act), _sms_status_kb(act))
+
+
+@router.callback_query(F.data.startswith("sms:st:"))
+async def sms_status(event: CallbackQuery) -> None:
+    if event.from_user is None:
+        return
+    aid = int(event.data.split(":", 2)[2])  # type: ignore[union-attr]
+    user = await _get_user(event.from_user)
+    async with session_factory()() as session:
+        act = await session.get(SmsActivation, aid)
+        if act is None or act.user_id != user.id:
+            await _edit_or_send(event, "Активация не найдена.", rows(menu_row()))
+            return
+    await _edit_or_send(event, _sms_card(act), _sms_status_kb(act))
+
+
+@router.callback_query(F.data.startswith("sms:x:"))
+async def sms_cancel(event: CallbackQuery) -> None:
+    if event.from_user is None:
+        return
+    aid = int(event.data.split(":", 2)[2])  # type: ignore[union-attr]
+    user = await _get_user(event.from_user)
+    async with session_factory()() as session:
+        act = await session.get(SmsActivation, aid)
+        if act is None or act.user_id != user.id:
+            await _edit_or_send(event, "Активация не найдена.", rows(menu_row()))
+            return
+        try:
+            act = await sms_service.cancel(session, aid, actor=f"user:{user.id}")
+            await session.commit()
+        except ServiceError as exc:
+            await session.rollback()
+            await _edit_or_send(event, f"⚠️ {exc.message}", _sms_status_kb(act))
+            return
+    await _edit_or_send(event, _sms_card(act), _sms_status_kb(act))

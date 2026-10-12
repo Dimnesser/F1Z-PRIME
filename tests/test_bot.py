@@ -116,3 +116,15 @@ async def test_support_ticket_via_bot(bot_env):
     await dp.feed_update(bot, _msg("Не пришёл номер по заказу", mid=2))
     sent = [m for m in session.requests if isinstance(m, SendMessage)]
     assert "Обращение #1 создано" in sent[-1].text
+
+
+async def test_sms_menu_button_and_disabled_message(bot_env):
+    bot, session, dp = bot_env
+    await dp.feed_update(bot, _msg("/start", mid=901))
+    sent = [m for m in session.requests if isinstance(m, SendMessage)]
+    assert "📱 Купить номер (SMS)" in _buttons(sent[-1])  # menu now offers SMS numbers
+    session.requests.clear()
+    await dp.feed_update(bot, _cb("sms:menu", uid=902))
+    out = [m for m in session.requests if isinstance(m, (SendMessage, EditMessageText))]
+    # SMS is disabled by default -> a clear "unavailable" message, never a fake catalog
+    assert any("недоступна" in (m.text or "") for m in out)

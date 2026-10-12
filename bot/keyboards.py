@@ -30,6 +30,7 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog"),
             InlineKeyboardButton(text="💎 Красивые номера", callback_data="premium"),
         ],
+        [InlineKeyboardButton(text="📱 Купить номер (SMS)", callback_data="sms:menu")],
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             InlineKeyboardButton(text="📦 Мои покупки", callback_data="orders"),
