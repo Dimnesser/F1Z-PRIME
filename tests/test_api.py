@@ -16,7 +16,7 @@ async def test_seeded_countries_with_prices(client):
     r = await client.get("/api/countries")
     assert r.status_code == 200
     data = {c["code"]: c for c in r.json()}
-    assert len(data) == 8
+    assert len(data) == 9
     assert data["CL"]["price"] == 60 and data["UA"]["price"] == 225 and data["US"]["dial_code"] == "+1"
     assert data["ID"]["flag"] == "🇮🇩" and data["BR"]["stock"] > 0
 
