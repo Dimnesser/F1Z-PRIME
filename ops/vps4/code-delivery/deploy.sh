@@ -16,10 +16,15 @@ mkdir -p "$ROOT" "$BACKUP"
 rsync -a --exclude node_modules --exclude dist --exclude sessions --exclude backups /opt/f1z-prime/ "$ROOT/release/"
 python3 "$PATCH/apply_patch.py" "$ROOT/release" --check
 python3 "$PATCH/apply_patch.py" "$ROOT/release"
+# The test container runs as a non-root user and mounts this tree read-only.
+find "$ROOT/release" -name '.env*' -prune -o -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
 
-# 2. Build images (backend first; web build runs tsc and fails on any type error)
-docker build -t "f1z-prime-backend:$TAG" -f "$ROOT/release/backend/Dockerfile" "$ROOT/release" > "$ROOT/backend-build.log" 2>&1 || { tail -40 "$ROOT/backend-build.log"; exit 1; }
-docker build -t "f1z-prime-web:$TAG" -f "$ROOT/release/docker/web.Dockerfile" "$ROOT/release" > "$ROOT/web-build.log" 2>&1 || { tail -60 "$ROOT/web-build.log"; exit 1; }
+# 2. Build images (backend first; web build runs tsc and fails on any type error).
+# A re-run with the same STAMP reuses images that already built successfully.
+docker image inspect "f1z-prime-backend:$TAG" > /dev/null 2>&1 ||
+  docker build -t "f1z-prime-backend:$TAG" -f "$ROOT/release/backend/Dockerfile" "$ROOT/release" > "$ROOT/backend-build.log" 2>&1 || { tail -40 "$ROOT/backend-build.log"; exit 1; }
+docker image inspect "f1z-prime-web:$TAG" > /dev/null 2>&1 ||
+  docker build -t "f1z-prime-web:$TAG" -f "$ROOT/release/docker/web.Dockerfile" "$ROOT/release" > "$ROOT/web-build.log" 2>&1 || { tail -60 "$ROOT/web-build.log"; exit 1; }
 
 # 3. Wizard tests against a throwaway database (dropped afterwards)
 DB=f1z_deploy_test_code_delivery_${STAMP//-/_}
