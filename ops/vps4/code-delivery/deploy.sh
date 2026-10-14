@@ -13,7 +13,8 @@ SITE=https://vps4.vps.webdock.cloud
 
 mkdir -p "$ROOT" "$BACKUP"
 # 1. Patched copy of the live tree (no .env changes, sessions untouched)
-rsync -a --exclude node_modules --exclude dist --exclude sessions --exclude backups /opt/f1z-prime/ "$ROOT/release/"
+rsync -a --exclude node_modules --exclude dist --exclude sessions --exclude backups --exclude /.env /opt/f1z-prime/ "$ROOT/release/"
+rm -f "$ROOT/release/.env"  # secrets stay out of the build/test copy (tests read their own settings)
 python3 "$PATCH/apply_patch.py" "$ROOT/release" --check
 python3 "$PATCH/apply_patch.py" "$ROOT/release"
 # The test container runs as a non-root user and mounts this tree read-only.
