@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ручные сессии — превью</title>
+<style>
+  :root { --bg:#0b0d14; --card:#141824; --line:#262c3d; --text:#e8ebf5; --muted:#8b93a8; --primary:#7c5cff; --green:#22c55e; --red:#ef4444; --violet:#a78bfa; --amber:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding:24px 16px 60px; }
+  .wrap { max-width:880px; margin:0 auto; display:grid; gap:36px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .step { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--primary); font-weight:700; margin-bottom:8px; }
+  .where { color:var(--muted); margin:0 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; }
+  .tabs { display:flex; gap:6px; background:#0f1320; border:1px solid var(--line); border-radius:14px; padding:4px; width:max-content; max-width:100%; flex-wrap:wrap; margin-bottom:14px; }
+  .tab { padding:7px 12px; border-radius:10px; color:var(--muted); font-weight:600; }
+  .tab.on { background:var(--primary); color:#fff; }
+  .title { font-weight:700; font-size:16px; margin-bottom:8px; display:flex; gap:8px; align-items:center; }
+  .muted { color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0; max-width:560px; }
+  label { font-size:12px; color:var(--muted); font-weight:600; display:block; margin-bottom:4px; }
+  .input { background:#0f1320; border:1px solid var(--line); border-radius:12px; padding:10px 12px; color:var(--text); }
+  .btn { display:inline-flex; gap:6px; align-items:center; background:var(--primary); color:#fff; font-weight:700; border-radius:12px; padding:10px 14px; }
+  .btn.danger { background:transparent; border:1px solid var(--red); color:var(--red); }
+  .row { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:8px; }
+  .ok { color:var(--green); } .err { color:var(--red); } .spin { color:var(--muted); }
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+  .b-green { background:#22c55e22; color:var(--green); } .b-violet { background:#a78bfa22; color:var(--violet); } .b-amber { background:#f59e0b22; color:var(--amber); }
+  .modal { max-width:640px; }
+  .fake { height:40px; border-radius:12px; background:#0f1320; border:1px dashed var(--line); margin-bottom:10px; display:flex; align-items:center; padding:0 12px; color:var(--muted); font-size:12px; }
+  .box { border:1px solid var(--line); border-radius:16px; padding:14px; margin:10px 0; }
+  .tg { background:#17212b; border-radius:18px; padding:16px; max-width:420px; }
+  .bubble { background:#182533; border-radius:14px 14px 14px 4px; padding:10px 12px; margin-bottom:8px; color:#e9eef4; }
+  .file { display:flex; gap:10px; align-items:center; }
+  .fileicon { width:42px; height:42px; border-radius:50%; background:#3a8ee6; display:grid; place-items:center; font-size:18px; }
+  code { background:#0f1a24; padding:1px 5px; border-radius:5px; color:#7fd1ff; }
+  .kbd { display:block; text-align:center; background:#2b5278; border-radius:10px; padding:8px; margin-top:6px; font-weight:600; }
+  .note { font-size:12px; color:var(--muted); margin-top:8px; }
+  @media (max-width:560px) { .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Ручная загрузка сессий — как это выглядит</h1>
+    <p class="muted">Макет интерфейса после релиза: цвета и шрифты те же, что в админке F1Z PRIME. Номера и имена файлов ниже выдуманы.</p>
+  </div>
+
+  <section>
+    <div class="step">1 · Рандом аккаунты 2015–2019</div>
+    <p class="where">Админка → «Аккаунты и файлы» → новая вкладка «Аккаунты 2015–2019»</p>
+    <div class="card">
+      <div class="tabs"><span class="tab">Создать .session</span><span class="tab">Загрузить файл</span><span class="tab on">Аккаунты 2015–2019</span></div>
+      <div class="title">⬆️ Рандом аккаунты 2015–2019: загрузка сессий</div>
+      <p class="muted" style="max-width:640px;margin:0">Каждый файл проверяется в Telegram (сессия авторизована, на аккаунте только это устройство) и попадает на склад товара «Рандом аккаунт 2015–2019». После оплаты бот сам отправит покупателю номер, .session, пароль 2FA и кнопку «Получить код». В обычный склад номеров эти аккаунты не попадают.</p>
+      <div class="grid2">
+        <div><label>Формат файлов</label><div class="input">.session Telethon ▾</div></div>
+        <div><label>Пароль 2FA (необязательно)</label><div class="input">••••••••</div><div class="note">Применится ко всем выбранным файлам</div></div>
+      </div>
+      <span class="btn">⬆️ Выбрать файлы .session</span>
+      <div style="margin-top:14px">
+        <div class="row"><span class="ok">✔</span><div><b>acc_2016_01.session</b><div class="muted">+38050111**** · Украина · 2FA сохранён · на складе: 1</div></div></div>
+        <div class="row"><span class="ok">✔</span><div><b>acc_2017_02.session</b><div class="muted">+7999123**** · Россия · 2FA сохранён · на складе: 2</div></div></div>
+        <div class="row"><span class="err">✖</span><div><b>acc_2018_03.session</b><div class="muted">На аккаунте есть другие устройства — завершите их сеансы и загрузите снова.</div></div></div>
+        <div class="row"><span class="spin">⟳</span><div><b>acc_2019_04.session</b><div class="muted">Проверяем в Telegram…</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">2 · Красивый номер — привязка сессии</div>
+    <p class="where">Админка → «Красивые номера» → нажать на номер → в окне редактирования новый блок</p>
+    <div class="card modal">
+      <div class="title">Редактировать номер</div>
+      <div class="fake">Страна · Полный номер · Маска · Уровень · Цена · Статус …</div>
+      <div class="box">
+        <div class="title" style="font-size:14px">🔑 Сессия аккаунта для выдачи</div>
+        <p class="muted" style="font-size:12px;margin:0 0 10px">Загрузите .session именно этого номера: она проверится в Telegram и будет храниться отдельно от склада номеров. После оплаты в карточке заказа появится кнопка «Выдать аккаунт в бот».</p>
+        <div class="grid2" style="grid-template-columns:150px 1fr auto;margin:0;max-width:none">
+          <div><label>Формат</label><div class="input">Telethon ▾</div></div>
+          <div><label>Пароль 2FA (необязательно)</label><div class="input">••••••</div></div>
+          <div style="display:flex;align-items:flex-end"><span class="btn">⬆️ .session</span></div>
+        </div>
+      </div>
+      <p class="muted" style="margin:6px 0">После загрузки блок выглядит так:</p>
+      <div class="box" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span class="badge b-green">● Загружена</span><span class="muted">380677777777.session · 2FA сохранён</span>
+        <span class="btn danger" style="margin-left:auto">🗑 Удалить</span>
+      </div>
+      <p class="note">Если сессия от другого номера, появится ошибка: «Сессия принадлежит другому номеру, а не этому красивому номеру».</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">3 · Заказ красивого номера — выдача</div>
+    <p class="where">Админка → «Заказы» → оплаченный заказ красивого номера → под названием товара</p>
+    <div class="card modal">
+      <div class="muted" style="font-size:12px;font-weight:600">Товар</div>
+      <div style="font-weight:700">PREMIUM NUMBER +380 67 777 77 77</div>
+      <div class="box" style="font-size:14px">
+        <b>Сессия красивого номера загружена · 2FA сохранён</b><br>
+        <span class="btn" style="margin-top:8px">➤ Выдать аккаунт в бот</span>
+      </div>
+      <p class="note">Перед отправкой появится подтверждение: «Бот отправит покупателю номер, файл .session и пароль 2FA. Заказ будет завершён.» После выдачи вместо кнопки будет строка «Выдана покупателю 15.10.2026, 14:32».</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">4 · Что получает покупатель в боте</div>
+    <p class="where">Аккаунт 2015–2019 приходит автоматически сразу после оплаты, а красивый номер — после нажатия кнопки в админке. Сообщения нельзя переслать или сохранить.</p>
+    <div class="tg">
+      <div class="bubble file"><div class="fileicon">📄</div><div><b>380677777777.session</b><div class="muted" style="font-size:12px">F1Z-1042 · Сессия</div></div></div>
+      <div class="bubble">
+        🎁 <b>Ваш красивый номер · F1Z-1042</b><br>PREMIUM NUMBER<br><br>
+        📱 Номер: <code>+380677777777</code><br>
+        🔐 Пароль 2FA: <code>s3cret-pass</code><br><br>
+        Файл .session отправлен отдельным сообщением (клиенты с поддержкой Telethon). Храните файл и пароль в надёжном месте и проверьте активные сеансы после входа.
+      </div>
+      <div class="bubble" style="margin-top:14px">
+        Для «Рандом аккаунт 2015–2019» — те же номер, .session и 2FA, плюс кнопка:
+        <span class="kbd">🔑 Получить код</span>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>
