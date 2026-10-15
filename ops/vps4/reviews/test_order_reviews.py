@@ -9,8 +9,8 @@ from tests.conftest import init_data_for
 from tests.test_admin_panel import _paid_order
 
 
-async def _completed(client, user_headers, admin_headers) -> int:
-    order = await _paid_order(client, user_headers, admin_headers)
+async def _completed(client, user_headers, admin_headers, key: str = "review-0001") -> int:
+    order = await _paid_order(client, user_headers, admin_headers, key=key)
     r = await client.post(f"/api/admin/orders/{order['id']}/status", json={"status": "completed", "delivery_data": "OK"},
                           headers=admin_headers)
     assert r.status_code == 200, r.text
@@ -46,11 +46,11 @@ async def test_review_is_editable_and_unique(client, user_headers, admin_headers
 
 
 async def test_review_rules(client, user_headers, admin_headers):
-    order = await _paid_order(client, user_headers, admin_headers)
+    order = await _paid_order(client, user_headers, admin_headers, key="review-paid-1")
     r = await client.post(f"/api/orders/{order['id']}/review", json={"rating": 5}, headers=user_headers)
     assert r.status_code == 409  # not received yet
     assert (await client.get(f"/api/orders/{order['id']}", headers=user_headers)).json()["review_allowed"] is False
-    oid = await _completed(client, user_headers, admin_headers)
+    oid = await _completed(client, user_headers, admin_headers, key="review-done-2")
     for bad in ({"rating": 0}, {"rating": 6}, {"rating": 5, "text": "x" * 1001}):
         assert (await client.post(f"/api/orders/{oid}/review", json=bad, headers=user_headers)).status_code == 422
     stranger = {"Authorization": f"tma {init_data_for(5550999, username='stranger')}"}
