@@ -2,28 +2,33 @@ import { KeyRound } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Premium } from '../../lib/types'
 import { useApi } from '../../lib/useApi'
-import { Badge, Card, ErrorBox, SearchInput } from '../ui'
+import { Badge, Card, ErrorBox, SearchInput, Tabs } from '../ui'
 import { PremiumSessionBox } from './PremiumSessionBox'
+import { SessionWizard } from './SessionWizard'
 
 type PremiumSession = { premium_number_id: number; delivered_at: string | null }
 
-/** «Аккаунты и файлы» → «Красивые номера»: pick a number, upload / see its bound .session. */
-export function PremiumSessionsTab() {
+/** «Аккаунты и файлы» → «Красивые номера»: pick a number, then create its session by code or upload a .session. */
+export function PremiumSessionsTab({ onSaved }: { onSaved: () => void }) {
   const { data, error, reload } = useApi<Premium[]>('/premium-numbers')
-  const { data: sessions } = useApi<PremiumSession[]>('/premium-sessions')
+  const { data: sessions, reload: reloadSessions } = useApi<PremiumSession[]>('/premium-sessions')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
+  const [mode, setMode] = useState<'create' | 'upload'>('create')
+  const [revision, setRevision] = useState(0)
   const bound = useMemo(() => new Map((sessions ?? []).map((s) => [s.premium_number_id, s])), [sessions])
   const digits = search.replace(/\D/g, '')
   const rows = useMemo(() => (data ?? []).filter((n) => !search || n.display_mask.includes(search)
     || (digits && n.number.includes(digits))), [data, search, digits])
   const current = data?.find((n) => n.id === selected) ?? null
+  const hasSession = current ? bound.has(current.id) : false
+  const saved = () => { reloadSessions(true); setRevision((n) => n + 1); onSaved() }
 
   return (
     <Card title={<span className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary-soft" />Красивые номера: сессии для выдачи</span>}>
       <p className="mb-4 max-w-2xl text-sm text-muted">
-        Выберите номер и загрузите его .session. Сессия хранится отдельно от склада номеров; после оплаты в карточке
-        заказа появится кнопка «Выдать аккаунт в бот».
+        Выберите номер, затем создайте его сессию по коду из Telegram или загрузите готовый .session. Сессия хранится
+        отдельно от склада номеров; после оплаты в карточке заказа появится кнопка «Выдать аккаунт в бот».
       </p>
       {error && <div className="mb-3"><ErrorBox text={error} onRetry={() => reload()} /></div>}
       <SearchInput className="mb-3" value={search} onChange={setSearch} placeholder="Поиск по цифрам" />
@@ -44,8 +49,14 @@ export function PremiumSessionsTab() {
         {data && rows.length === 0 && <li className="text-sm text-muted">Номера не найдены.</li>}
       </ul>
       {current && (
-        <div className="mt-4">
-          <PremiumSessionBox key={current.id} numberId={current.id} sold={current.status === 'sold'} />
+        <div className="mt-4 space-y-4">
+          {!hasSession && current.status !== 'sold' && (
+            <Tabs value={mode} onChange={(value) => setMode(value as 'create' | 'upload')}
+              tabs={[{ value: 'create', label: 'Создать по номеру' }, { value: 'upload', label: 'Загрузить .session' }]} />
+          )}
+          {!hasSession && current.status !== 'sold' && mode === 'create'
+            ? <SessionWizard key={`wizard:${current.id}`} target={{ kind: 'premium', premiumNumberId: current.id, phone: current.number }} onSaved={saved} />
+            : <PremiumSessionBox key={`${current.id}:${revision}`} numberId={current.id} sold={current.status === 'sold'} />}
         </div>
       )}
     </Card>
