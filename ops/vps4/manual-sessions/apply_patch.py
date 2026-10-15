@@ -125,10 +125,10 @@ def main() -> int:
             return 1
     patched['backend/app/models.py'] = models.rstrip('\n') + '\n' + MODEL
     versions = root / 'backend/migrations/versions'
-    if any(p.name.split('_')[2:3] == ['0019'] for p in versions.glob('*.py')):
+    if any(p.name.split('_')[1:2] == ['0019'] for p in versions.glob('*.py')):
         print('MIGRATION_0019_EXISTS')
         return 1
-    if not any(p.name.split('_')[2:3] == ['0018'] for p in versions.glob('*.py')):
+    if not any(p.name.split('_')[1:2] == ['0018'] for p in versions.glob('*.py')):
         print('MIGRATION_0018_MISSING')
         return 1
     if check_only:
