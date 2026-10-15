@@ -22,8 +22,11 @@ DC_IPV4 = {1: '149.154.175.53', 2: '149.154.167.51', 3: '149.154.175.100', 4: '1
 
 
 class TDataError(ServiceError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message, 422, 'tdata_invalid')
+    def __init__(self, message: str, code: str = 'tdata_invalid') -> None:
+        super().__init__(message, 422, code)
+
+
+NOT_TDATA = 'tdata_no_keys'  # not a Telegram Desktop folder at all (no key_datas / not a zip)
 
 
 class _Stream:
@@ -113,7 +116,7 @@ def _read_zip(path: Path) -> dict[str, bytes]:
                     parts = parts[parts.index('tdata') + 1:]
                 files['/'.join(parts)] = archive.read(info)
     except zipfile.BadZipFile:
-        raise TDataError('Архив TData повреждён или это не zip.') from None
+        raise TDataError('Архив TData повреждён или это не zip.', NOT_TDATA) from None
     return files
 
 
@@ -122,7 +125,7 @@ def extract(path: Path) -> tuple[int, int, bytes]:
     files = _read_zip(path)
     key_datas = next((files[k] for k in ('key_datas', 'key_data') if k in files), None)
     if key_datas is None:
-        raise TDataError('В архиве нет tdata/key_datas. Заархивируйте папку tdata целиком.')
+        raise TDataError('В архиве нет tdata/key_datas. Заархивируйте папку tdata целиком.', NOT_TDATA)
     stream = _Stream(_tdf(key_datas))
     salt, key_encrypted, info_encrypted = stream.bytearray(), stream.bytearray(), stream.bytearray()
     local_key = _Stream(_decrypt_local(key_encrypted, _passcode_key(salt))).raw(256)
@@ -172,4 +175,4 @@ def session_name(zip_name: str) -> str:
     return (zip_name[:-4] if zip_name.lower().endswith('.zip') else zip_name) + '.session'
 
 
-__all__ = ['TDataError', 'extract', 'session_name', 'to_session_bytes']
+__all__ = ['NOT_TDATA', 'TDataError', 'extract', 'session_name', 'to_session_bytes']
