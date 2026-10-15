@@ -95,7 +95,7 @@ async def _verify(session, name: str, fmt: UploadFormat) -> dict:  # noqa: ANN00
 
 async def _accounts_product(session) -> Product:  # noqa: ANN001
     product = await session.scalar(select(Product).where(Product.category == "accounts")
-                                   .order_by(Product.id).limit(1).with_for_update())
+                                   .order_by(Product.id).limit(1).with_for_update(of=Product))
     if product is None:
         raise ServiceError("Товар «Рандом аккаунт 2015–2019» не найден.", 404, "accounts_product_missing")
     if product.uses_phone_inventory:

@@ -96,6 +96,7 @@ async def test_premium_session_bound_to_number_and_delivered(client, user_header
         await db.commit()
     state = (await client.get(f"/api/admin/orders/{order['id']}/premium-account", headers=admin_headers)).json()
     assert state["available"] and state["can_send"] and state["two_fa"]
+    sent.clear()  # drop order notifications; keep only the delivery calls
     r = await client.post(f"/api/admin/orders/{order['id']}/premium-account", headers=admin_headers)
     assert r.status_code == 200, r.text
     assert sent[0][0] == "document"
