@@ -48,6 +48,18 @@ EDITS: dict[str, list[tuple[str, str]]] = {
     'backend/app/api/admin_sessions.py': [
         ("        result['registered'] = True\n", "        result['registered'] = True\n" + APP_WARNING),
     ],
+    'tests/test_phone_handoff.py': [
+        ('        assert await db.scalar(select(PhoneHandoff.id)) is None\n'
+         '        assert (await db.get(Order, oid)).status.value == "processing"\n'
+         '    assert not mtproto.revoked\n',
+         '        assert await db.scalar(select(PhoneHandoff.id)) is None\n'
+         '        # unsellable account: refunded at once and the number held, never left in «sending»\n'
+         '        assert (await db.get(Order, oid)).status.value == "refunded"\n'
+         '        phone = await db.scalar(select(PhoneInventory).where(PhoneInventory.phone_e164 == "+380671112230"))\n'
+         '        assert phone.status == "DISABLED" and phone.note.startswith("hold:other_devices")\n'
+         '        assert phone.sold_order_id is None\n'
+         '    assert not mtproto.revoked\n'),
+    ],
     'frontend/src/pages/OrderDetail.tsx': [
         ("{o.phone_login_delivery && o.fulfillment_status === 'sending' && !o.phone_sent_at && (",
          "{o.status === 'processing' && o.phone_login_delivery && o.fulfillment_status === 'sending' && !o.phone_sent_at && ("),
