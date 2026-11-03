@@ -4,7 +4,7 @@ import { compactMoney, dateShort, num } from '../lib/api'
 interface Point { date: string; value: number }
 
 /** Responsive SVG area chart with hover/touch tooltip (no chart library — keeps the bundle small). */
-export function AreaChart({ data, color = '#8B5CF6', format = (v: number) => num(v), height = 220 }: {
+export function AreaChart({ data, color = '#756BFF', format = (v: number) => num(v), height = 220 }: {
   data: Point[]; color?: string; format?: (v: number) => string; height?: number
 }) {
   const ref = useRef<SVGSVGElement>(null)
@@ -66,7 +66,7 @@ export function AreaChart({ data, color = '#8B5CF6', format = (v: number) => num
   )
 }
 
-export function MiniBars({ data, color = '#22D3EE', height = 120 }: { data: Point[]; color?: string; height?: number }) {
+export function MiniBars({ data, color = '#34D5C5', height = 120 }: { data: Point[]; color?: string; height?: number }) {
   const max = Math.max(1, ...data.map((d) => d.value))
   return (
     <div className="flex items-end gap-[3px]" style={{ height }}>

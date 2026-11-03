@@ -76,7 +76,7 @@ async def test_start_replies_with_menu(bot_env):
 @pytest.mark.parametrize(
     "data,needle",
     [
-        ("catalog", "Чили"),
+        ("catalog", "Бангладеш"),
         ("premium", "7777"),
         ("profile", "Telegram ID"),
         ("orders", "нет покупок"),
@@ -94,17 +94,17 @@ async def test_menu_buttons_work(bot_env, data, needle):
 
 async def test_buy_without_balance_shows_alert(bot_env):
     bot, session, dp = bot_env
-    await dp.feed_update(bot, _cb("buy:p:1:balance"))
+    await dp.feed_update(bot, _cb("buy:p:2:balance"))
     alerts = [m for m in session.requests if isinstance(m, AnswerCallbackQuery) and m.show_alert]
     assert alerts and "Недостаточно средств" in alerts[0].text
 
 
 async def test_buy_with_stars_creates_order(bot_env):
     bot, session, dp = bot_env
-    await dp.feed_update(bot, _cb("buy:p:1:stars"))
+    await dp.feed_update(bot, _cb("buy:p:2:stars"))
     edits = [m for m in session.requests if isinstance(m, EditMessageText)]
     assert edits and "Заказ #1" in edits[-1].text
-    assert any("Оплатить 71 Stars" in t for t in _buttons(edits[-1]))
+    assert any("Оплатить 375 Stars" in t for t in _buttons(edits[-1]))  # UA: own Stars price
     await dp.feed_update(bot, _cb("orders", uid=11))
     edits = [m for m in session.requests if isinstance(m, EditMessageText)]
     assert "#1" in edits[-1].text
@@ -116,3 +116,30 @@ async def test_support_ticket_via_bot(bot_env):
     await dp.feed_update(bot, _msg("Не пришёл номер по заказу", mid=2))
     sent = [m for m in session.requests if isinstance(m, SendMessage)]
     assert "Обращение #1 создано" in sent[-1].text
+
+
+async def test_sms_menu_button_and_disabled_message(bot_env):
+    bot, session, dp = bot_env
+    await dp.feed_update(bot, _msg("/start", mid=901))
+    sent = [m for m in session.requests if isinstance(m, SendMessage)]
+    assert "📱 Купить номер (SMS)" in _buttons(sent[-1])  # menu now offers SMS numbers
+    session.requests.clear()
+    await dp.feed_update(bot, _cb("sms:menu", uid=902))
+    out = [m for m in session.requests if isinstance(m, (SendMessage, EditMessageText))]
+    # SMS is disabled by default -> a clear "unavailable" message, never a fake catalog
+    assert any("недоступна" in (m.text or "") for m in out)
+
+
+async def test_balance_purchase_asks_for_confirmation(bot_env):
+    bot, session, dp = bot_env
+    await dp.feed_update(bot, _cb("product:2"))
+    edits = [m for m in session.requests if isinstance(m, EditMessageText)]
+    buy_btn = next(b for row in edits[-1].reply_markup.inline_keyboard for b in row if b.text == "💳 Купить с баланса")
+    assert buy_btn.callback_data == "cfm:p:2"  # no instant charge from the product card
+    await dp.feed_update(bot, _cb("cfm:p:2"))
+    edits = [m for m in session.requests if isinstance(m, EditMessageText)]
+    assert "Подтверждение покупки" in edits[-1].text
+    # empty balance -> top-up offered instead of a purchase button
+    assert "Недостаточно средств" in edits[-1].text
+    assert "➕ Пополнить баланс" in _buttons(edits[-1])
+    assert not any(t.startswith("✅ Подтвердить") for t in _buttons(edits[-1]))

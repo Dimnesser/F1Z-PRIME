@@ -73,3 +73,138 @@
 - Deployed to vps4: DEPLOYED_COMMIT `97a99e9` (feature in `0e09c04` + CSP quoting). Backups:
   `/root/f1z-backup/db-20261010-174445.sql.gz`, `db-20261010-174755.sql.gz` + code archives. Migration 0003 applied,
   data kept (users 3, orders 3, products 8); owner token exchange OK, non-admin 403, forged 401, bot polling, no API errors.
+
+## Stage 6 — Full order automation + extended admin (IN PROGRESS, not deployed yet)
+Branch `ccr-27c43927-xio4pi`. Live on vps4 is still `97a99e9`.
+
+Done (backend, committed, 106 tests pass):
+- Migrations 0004 (inventory units, stock movements, jobs, task runs, incidents, refunds, templates, order
+  public_id / fulfillment fields, ticket order/category/priority) and 0005 (roles, admin RBAC columns,
+  approvals, staff inbox, admin prefs). Additive only; existing data mapped.
+- Worker process `python -m app.worker` (docker-compose service `worker`): durable job queue (SKIP LOCKED,
+  backoff 30s·2^n ≤ 1h, dead letter), periodic tasks (reservations expiry, stuck orders, payment checks,
+  low stock, outbox, backups, cleanup, daily summary), heartbeat. Bot heartbeat too.
+- Fulfillment per product: auto (encrypted units AES-GCM / delivery text) / manual / review; fast path
+  `run_now` after payment + durable job fallback; failure → incident + manual queue; admin retry/handover.
+- Refunds: balance / Stars (refundStarPayment via worker) / manual (operator confirms); no double refund.
+- Notifications from editable templates (customer + staff), dedupe per order+event, quiet hours.
+- RBAC: permission catalog, 8 built-in roles + custom roles, extra/denied permissions, limits,
+  two-person approvals, expiry, revoke sessions, no self-escalation, owner untouchable; staff inbox, prefs.
+- Mini App API: order `stage`, `delivered_items` only after delivery, one-tap support ticket per order.
+- Admin API: inventory units (masked), stock history/adjust with reason, order timeline from server records.
+
+Stage C ✅ (commit 67ab448, 116 tests pass): migration 0006 — promo codes (server-side validation under row
+lock, per-user and total limits, scope, window, released on cancel/expiry), product sale price / tags /
+attributes / sale window / per-order & per-user limits / price history / copy / bulk sale & tags, storefront
+settings (sort, out-of-stock) applied, rules engine WHEN→IF→THEN (`services/rules.py`, `api/admin_rules.py`).
+
+Stage D ✅: admin UI moved from fixed roles to permissions; new pages Team (staff/roles/approvals), Promo, Rules
+(builder + dry-run + run history), System (status, backups, notification templates), Inbox, Automation center
+(health, metrics, dead jobs, incidents, tasks), order card with server timeline / fulfillment / refunds, products
+with sale/schedule/tags/attributes/inventory units/price & stock history, dashboard widget prefs + compact mode.
+Mini App: promo code at checkout, sale prices, tags/attributes, order stage, delivered keys, one-tap order support.
+Checks: backend 117 passed; admin + Mini App tsc and vite builds clean; Playwright E2E against the local API
+(built admin, embedded worker): 17 pages × desktop/phone without console errors or 5xx, and 14 real click
+scenarios OK (key upload with duplicate skipped, auto-delivery, key masked for staff, order timeline, invite by
+Telegram ID, new role, promo code, rule + dry-run + save, template preview, inbox, run task now).
+
+Remaining: Stage E (deploy via deploy key with backups, verify).
+
+Continue with: `cd /home/user/F1Z-PRIME && service postgresql start && python3 -m pytest -q` then
+implement the remaining stages listed above (see task list in this file).
+
+## Stage E — Deploy 21fecb1 to vps4 ✅ (DEPLOYED_COMMIT 21fecb1)
+- Deploy script `f1z-deploy-21fecb1` (Webdock user script 415659) ran 2026-10-11 08:02 (UTC+2):
+  cloned branch `ccr-27c43927-xio4pi` over the read-only deploy key, commit verified `21fecb1`.
+  Backups: `/root/f1z-backup/db-20261011-060218.sql.gz` (16 tables), `/root/f1z-backup/code-20261011-060218.tgz`.
+  `.env` sha256 identical before/after. Build runs in background (`/root/f1z/run-v3.sh`, log `/root/f1z/v3.log`);
+  the old version (97a99e9) keeps serving until `docker compose up -d` swaps containers.
+- A background waiter (`/root/f1z/wait-verify-v3.sh`, launched by user script 415662) waits for `V3_FINISHED`,
+  then runs the read-only check `/root/f1z/f1z-verify-v3.sh` and writes `/root/f1z/verify-v3-result.txt`
+  (ends with `DONE`). No rebuild, no new deploy.
+- Next step: read `/root/f1z/verify-v3-result.txt` once (Webdock fetch file) and report DEPLOYED_COMMIT,
+  containers (incl. new `worker`), alembic=0006, HTTPS/API/Mini App/admin/bot checks, worker heartbeat, log errors.
+- Result (`/root/f1z/verify-v3-result.txt`, DONE, 2026-10-11 06:05 UTC): V3_UP_OK; containers api (healthy),
+  web (healthy), bot, worker (new), db (healthy, not restarted); alembic 0003→0004→0005→0006; data kept
+  (users 4, orders 3 — all got public_id, products 8, payments 11); 8 built-in roles seeded; all worker tasks ran
+  once without failures; /system/status version=21fecb1, api/db/worker/bot ok; 21 admin endpoints 200 for the
+  owner; stranger exchange 403, admin API without auth 401; Mini App 200 (TLS valid), new public endpoints OK;
+  no errors in api/worker logs; bot token not in logs; memory: worker 59/160 MiB, api 97/256, bot 130/192.
+
+## Stage F — Country catalog 2026-10 (13 countries, UAH / USD / Stars)
+- Migration 0007: products.price_usd, price_stars, stars_enabled; orders.stars_total, usd_total (additive).
+- `services/catalog_update.py`: applied once at API start (setting `catalog_version`), no duplicates
+  (countries by ISO code, number product by country), old prices replaced with price history,
+  CL/VN/ID hidden (not deleted), unconfirmed seeded stock of numbers reset to 0 (production only),
+  category «Рандом аккаунты 2015–2019» (75 грн / 150 ⭐, manual, Stars payment off by default — Telegram rules).
+- Stars invoice = product's own Stars price (× qty, promo share), never converted by the rate; USD is reference only.
+- Guarantee block (settings guarantee_*), «Нет нужной страны?» → support ticket (category country_request).
+- «Мгновенная выдача» only for auto mode + confirmed stock; manual products show «Выдача оператором».
+- Tests 126 passed (9 new in tests/test_catalog_2026.py); mobile check 390px: 13 countries, no overflow.
+- Deploy 9c7ff2f started 2026-10-11 06:59 UTC (user script 415675): backups `/root/f1z-backup/db-20261011-065911.sql.gz`
+  (32 tables) and `code-20261011-065911.tgz`; `.env` unchanged; before: orders=3, paid sum 85.00.
+  Build + checks run in background; result file `/root/f1z/verify-v4-result.txt` (ends with DONE).
+  Next step: read that file once and report.
+
+## Stage G — Legacy panel migration helpers (tools/)
+- Added read-only, privacy-preserving helpers under `tools/` (not part of the Docker runtime):
+  `legacy_panel_audit.py` (aggregate region/price/sold only; opens accounts.db read-only/immutable),
+  `legacy_catalog_preview.py` (CSV of HIDDEN draft products, stock 0, for admin → Products → Import),
+  `legacy_reconcile.py` (compares legacy aggregates with a product export; marks REVIEW_EXISTING/NEW; no DB writes),
+  `LEGACY_INTEGRATION.md` (migration + security boundaries).
+- Helpers never read phone numbers, Telegram sessions/auth codes, or buyer data; tests assert nothing leaks.
+- Tests: `tests/test_legacy_catalog_preview.py` (in the pytest suite) + `tools/tests/test_legacy_reconcile.py`; full suite 127 passed.
+- NOT integrated: the uploaded legacy `bot.py`, `accounts.db`, `.session` files and receipts — those contain real
+  Telegram account credentials and personal data and are deliberately excluded from the repo and the server.
+
+## Stage H — UI/UX redesign 2026 «Midnight Premium» ✅ deployed (DEPLOYED_COMMIT 14830ea)
+- Base: fast-forward of this branch to `4bdd0d5` (head of `ccr-27c43927-xio4pi`); redesign commits on top.
+- Mini App: CSS-variable design tokens (palette #080B12 / #111624 / #171E2E, accent #756BFF, #34D5C5), light theme
+  that follows Telegram (Profile → Оформление: Авто / Тёмная / Светлая), component library in `components/ui.tsx`,
+  `Cards.tsx`, `Sheet.tsx` (BottomSheet + ConfirmDialog), `Toast.tsx`. New bottom nav Главная / Каталог / Заказы /
+  Баланс / Профиль (safe-area, hidden while the keyboard is open). New `/balance` screen. Redesigned Home, Catalog,
+  Product, SMS activations (purchase confirmation, live card with timer, cancel confirmation, history), Orders
+  (active / completed / cancelled / refunds), Order, Profile, Support, Ticket. framer-motion removed:
+  JS 133 → 103 KB gzip.
+- Admin: same palette and Onest typography, StatCard / StatusIndicator, grouped sidebar, desktop top bar with
+  breadcrumbs, grouped mobile «Ещё» sheet; dashboard with hero KPIs, «Состояние магазина» strip and SMS widget;
+  SMS page KPIs incl. cost/profit.
+- Bot: unified message style, confirmation screen before balance purchases (`cfm:` → existing `buy:`).
+- Verification: pytest 177 passed (local PostgreSQL 16); `npm run build` (tsc -b + vite) OK for both apps;
+  Playwright (Chromium, outside Telegram): SMS purchase → timer → cancel, product qty → checkout, top-up sheet,
+  bottom nav, order cancel dialog, theme switch, loading / error / empty states; no horizontal overflow at
+  320 / 360 / 375 / 414 / 430 px; admin pages at 1440 and 390 px without page errors.
+  Not checked: a real Telegram client WebView, real payments, the real SMS provider.
+- Deploy 2026-10-12 12:31 UTC by owner's request: Webdock account script `f1z-deploy-14830ea` (id 416365), run
+  detached on vps4; result `/root/f1z/deploy-14830ea-result.txt` = DEPLOY OK. Previous: `33dfca0`.
+  Backups: `/root/f1z-backup/db-20261012-123105.sql.gz` (gzip OK), `env-20261012-123105.bak`, code snapshot
+  `/opt/f1z-prime.prev-20261012-123105` (rollback). Migration 0010 applied (`alembic current = 0010 (head)`,
+  owned_sms tables created empty). Data kept: orders/products/users = 4/17/11; `sms_enabled` still false.
+  Checks: api healthy after ~5 s, bot/worker/web restarted, Mini App and /admin/ 200 over HTTPS and serve the new
+  build, /balance 200, admin SMS API without auth 401, no error lines in api/bot/worker logs.
+
+## Stage H2 — second design pass «SIM card» ✅ deployed (DEPLOYED_COMMIT 9977276)
+- After owner feedback: balance as a SIM card (Tektur numerals), Golos Text UI font, real round flags (flagcdn,
+  emoji fallback), grouped lists instead of cards, price-pill quick buy in the catalog; admin KPI numerals in Tektur;
+  Caddy serves the Mini App index.html with `Cache-Control: no-cache`.
+- Deploy 2026-10-12 13:03 UTC: Webdock script `f1z-deploy-9977276` (id 416390), previous `14830ea`.
+  Backups: `/root/f1z-backup/db-20261012-130335.sql.gz` (gzip OK), `env-20261012-130335.bak`,
+  snapshot `/opt/f1z-prime.prev-20261012-130335`. No migrations (0010 head). Data: orders/products/users = 4/17/14.
+  Checks: api healthy ~5 s, Mini App/admin 200 and serve the new build, index no-cache, admin API 401 without auth,
+  logs: only Caddy's harmless «no OCSP stapling» warning.
+
+## Stage I — on-demand login-code retrieval (personal) ✅ deployed (DEPLOYED_COMMIT f1100be)
+- Personal self-hosted automation for the owner's own Telegram accounts: read the latest login code from a sold
+  Telethon `.session` file on demand (owner-scoped order, delivered only), via GET /api/orders/{id}/code and a bot
+  button. New dep `telethon`, settings TELEGRAM_API_ID/HASH + SESSIONS_DIR, `sessions` volume on api/bot/worker.
+  `.session` files and API credentials stay out of git (only on the server under SESSIONS_DIR / .env).
+- Fix on top of the uploaded V2: resolve_session_path treated any token with a digit as a phone; restricted to
+  phone-like tokens so mixed basenames like `acc_1` map to `acc_1.session`.
+- Tests: 185 passed locally (incl. test_session_codes).
+- Deploy 2026-10-12 14:44 UTC: Webdock script `f1z-deploy-f1100be` (id 416463), previous `9977276`.
+  Backups: db-20261012-144439.sql.gz (gzip OK), env-20261012-144439.bak, snapshot /opt/f1z-prime.prev-20261012-144439.
+  No migrations (0010 head). Checks: api healthy ~5 s; telethon 1.40.0 importable in api+bot; /srv/sessions mounted
+  in api+bot; data orders/products/users = 5/17/16; GET /api/orders/1/code without auth = 401; Mini App/admin 200;
+  no error lines in logs.
+- Not configured on the server yet: TELEGRAM_API_ID/HASH in .env and real .session files in SESSIONS_DIR —
+  without them the endpoint returns a clear 503/404 and nothing else is affected.

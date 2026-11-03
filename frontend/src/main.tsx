@@ -10,9 +10,11 @@ import { ApiError } from './lib/api'
 import { ShopProvider } from './lib/shop'
 import { installGlobalErrorReporting } from './lib/errors'
 import { initTelegram } from './lib/telegram'
+import { initTheme } from './lib/theme'
 
 installGlobalErrorReporting()
 initTelegram()
+initTheme()
 
 const queryClient = new QueryClient({
   defaultOptions: {

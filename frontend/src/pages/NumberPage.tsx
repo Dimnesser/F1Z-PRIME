@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
 import { ArrowLeft, Eye, Gem, Lock, Sparkles } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Badge, Button, EmptyState, Skeleton } from '../components/ui'
+import { Flag } from '../components/Flag'
+import { Badge, Button, EmptyState, IconButton, Skeleton } from '../components/ui'
 import { api } from '../lib/api'
 import { money } from '../lib/format'
 import { useShop } from '../lib/shop'
@@ -15,57 +15,53 @@ export default function NumberPage() {
   const { checkout } = useShop()
   const { data: n, isLoading, error } = useQuery({ queryKey: ['premium', 'one', id], queryFn: () => api.premiumOne(Number(id)) })
 
-  if (isLoading) return <Skeleton className="h-80 rounded-[32px]" />
-  if (error || !n) return <EmptyState icon={<Gem className="h-7 w-7" />} title="Номер недоступен" action={<Button size="md" onClick={() => navigate('/numbers')}>Все номера</Button>} />
+  if (isLoading) return <div className="space-y-3"><Skeleton className="h-11 w-11 rounded-[14px]" /><Skeleton className="h-80 rounded-[24px]" /></div>
+  if (error || !n) return <EmptyState icon={<Gem className="h-7 w-7" />} title="Номер недоступен" text="Возможно, его уже купили" action={<Button size="md" onClick={() => navigate('/numbers')}>Все номера</Button>} />
 
   const available = n.status === 'available'
   return (
-    <div className="space-y-4">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-muted pressable">
-        <ArrowLeft className="h-4 w-4" /> Назад
-      </button>
-      <motion.div className="fade-in rounded-[32px] bg-brand p-[1.5px] shadow-glow">
-        <div className="relative overflow-hidden rounded-[31px] bg-[radial-gradient(120%_120%_at_100%_0%,#2b1a5c_0%,#13112a_50%,#0a1720_100%)] p-6">
-          <div className="pointer-events-none absolute -left-10 -top-10 h-52 w-52 rounded-full bg-[radial-gradient(closest-side,rgba(139,92,246,0.42),rgba(34,211,238,0.16)_55%,transparent)]" />
+    <div className="space-y-3">
+      <IconButton label="Назад" onClick={() => navigate(-1)}><ArrowLeft className="h-5 w-5" /></IconButton>
+      <section className="fade-in rounded-[24px] bg-gradient-to-br from-primary/60 via-primary/10 to-accent/40 p-px shadow-card">
+        <div className="relative overflow-hidden rounded-[23px] bg-surface p-6">
+          <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgb(var(--primary)/0.25),transparent)]" />
           <div className="relative flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em]">
-              <Gem className="h-3.5 w-3.5" /> {n.title}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-ov/[0.07] px-3 py-1 text-[13px] font-medium">
+              <Gem className="h-3.5 w-3.5 text-primary-soft" /> {n.title}
             </span>
-            <span className="text-4xl">{n.country?.flag ?? '🌐'}</span>
+            <Flag code={n.country?.code} emoji={n.country?.flag} size={36} />
           </div>
-          <div className="relative mt-8 text-center font-mono text-[30px] font-bold tracking-wider text-white">{n.display_mask}</div>
-          <div className="relative mt-2 text-center text-[13px] text-white/60">{n.country?.name} · {n.country?.dial_code}</div>
+          <div className="num relative mt-8 text-center font-display text-[32px] font-semibold tracking-[0.06em]">{n.display_mask}</div>
+          <div className="relative mt-2 text-center text-[13px] text-muted">{n.country?.name} · {n.country?.dial_code}</div>
           <div className="relative mt-8 flex items-end justify-between">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-white/60">Стоимость</div>
-              <div className="font-display text-[28px] font-bold text-white">{money(n.price)}</div>
+              <div className="text-[13px] text-muted">Стоимость</div>
+              <div className="num mt-1 font-display text-[28px] font-semibold leading-none">{money(n.price)}</div>
             </div>
-            <Badge tone={available ? 'green' : 'gray'}>{available ? '📦 В наличии' : 'Недоступен'}</Badge>
+            <Badge tone={available ? 'green' : 'gray'} dot>{available ? 'В наличии' : 'Недоступен'}</Badge>
           </div>
         </div>
-      </motion.div>
+      </section>
 
-      <div className="card space-y-3 p-4">
-        <div className="flex items-start gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary-soft"><Lock className="h-4 w-4" /></div>
-          <p className="text-[13.5px] leading-relaxed text-ink/85">Часть цифр скрыта маской. Полный номер появится в заказе сразу после подтверждения оплаты.</p>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-secondary/15 text-secondary"><Eye className="h-4 w-4" /></div>
-          <p className="text-[13.5px] leading-relaxed text-ink/85">Номер бронируется за вами на 30 минут после создания заказа — его не сможет купить никто другой.</p>
-        </div>
-        {n.description && (
-          <div className="flex items-start gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning"><Sparkles className="h-4 w-4" /></div>
-            <p className="text-[13.5px] leading-relaxed text-ink/85">{n.description}</p>
+      <section className="card hairline overflow-hidden">
+        {[
+          { icon: Lock, tint: 'bg-primary/12 text-primary-soft', t: 'Часть цифр скрыта маской. Полный номер появится в заказе сразу после подтверждения оплаты.' },
+          { icon: Eye, tint: 'bg-accent/12 text-accent', t: 'Номер бронируется за вами на 30 минут после создания заказа — его не сможет купить никто другой.' },
+          ...(n.description ? [{ icon: Sparkles, tint: 'bg-warning/12 text-warning', t: n.description }] : []),
+        ].map(({ icon: Icon, tint, t }) => (
+          <div key={t} className="flex items-start gap-3 p-4">
+            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${tint}`}><Icon className="h-4 w-4" /></div>
+            <p className="text-[13.5px] leading-relaxed text-ink/85">{t}</p>
           </div>
-        )}
-      </div>
+        ))}
+      </section>
 
-      <div className="sticky z-30" style={{ bottom: 'calc(var(--safe-bottom) + 92px)' }}>
-        <Button className="w-full" disabled={!available} onClick={() => checkout({ kind: 'premium', number: n })}>
-          Купить за {money(n.price)}
-        </Button>
+      <div className="sticky-cta sticky z-30 pt-2">
+        <div className="rounded-[20px] border border-line/80 bg-surface/90 p-2 shadow-pop backdrop-blur-xl">
+          <Button className="w-full" disabled={!available} onClick={() => checkout({ kind: 'premium', number: n })}>
+            {available ? <>Купить за <span className="num">{money(n.price)}</span></> : 'Номер недоступен'}
+          </Button>
+        </div>
       </div>
     </div>
   )

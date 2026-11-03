@@ -15,9 +15,13 @@ from app.models import (
     BalanceTransaction,
     Category,
     Country,
+    InventoryItem,
+    PhoneInventory,
     Order,
+    OrderStatus,
     Payment,
     PaymentMethod,
+    PaymentStatus,
     PremiumNumber,
     PremiumStatus,
     Product,
@@ -28,11 +32,13 @@ from app.models import (
 )
 from app.schemas import (
     CountryCatalogOut,
+    LoginCodeOut,
     ManualSubmit,
     MessageCreate,
     OrderCreate,
     OrderDetailOut,
     OrderOut,
+    OrderSupportCreate,
     PaymentOut,
     PayRequest,
     PayResponse,
@@ -48,7 +54,11 @@ from app.schemas import (
 from app.services import orders as order_service
 from app.services import payments as payment_service
 from app.services import settings as settings_service
-from app.services import monitor, telegram
+from app.services import fulfillment, inventory, monitor, notifications
+from app.services import promo as promo_service
+from app.services import rules
+from app.services import session_codes
+from app.services import support as support_service
 from app.services.common import utcnow
 
 router = APIRouter(prefix="/api", tags=["miniapp"])
@@ -114,13 +124,21 @@ async def _country_catalog(session: SessionDep) -> list[CountryCatalogOut]:
     countries = (
         await session.scalars(select(Country).where(Country.is_active).order_by(Country.sort_order, Country.name))
     ).all()
-    products = (
-        await session.scalars(
-            select(Product)
-            .where(Product.status == ProductStatus.active, Product.category == "numbers", Product.country_id.is_not(None))
-            .order_by(Product.price)
-        )
-    ).all()
+    now = utcnow()
+    products = sorted(
+        (
+            p for p in (
+                await session.scalars(
+                    select(Product).where(
+                        Product.status == ProductStatus.active, Product.category == "numbers",
+                        Product.country_id.is_not(None),
+                    )
+                )
+            ).unique().all()
+            if p.on_sale_window(now)
+        ),
+        key=lambda p: p.effective_price(now),
+    )
     by_country: dict[int, list[Product]] = {}
     for p in products:
         by_country.setdefault(p.country_id, []).append(p)  # type: ignore[arg-type]
@@ -132,10 +150,13 @@ async def _country_catalog(session: SessionDep) -> list[CountryCatalogOut]:
         out.append(
             CountryCatalogOut(
                 **CountryCatalogOut.model_validate(c, from_attributes=True).model_dump(
-                    exclude={"product_id", "price", "stock"}
+                    exclude={"product_id", "price", "stock", "price_usd", "price_stars", "stars_enabled"}
                 ),
                 product_id=main.id if main else None,
-                price=main.price if main else None,
+                price=main.effective_price(now) if main else None,
+                price_usd=main.price_usd if main else None,
+                price_stars=main.price_stars if main else None,
+                stars_enabled=main.stars_enabled if main else True,
                 stock=sum(p.stock for p in items),
             )
         )
@@ -180,6 +201,7 @@ async def products(
     country_id: int | None = None,
     category: str | None = Query(default=None, max_length=32),
     popular: bool | None = None,
+    tag: str | None = Query(default=None, max_length=32),
 ) -> list[Product]:
     stmt = select(Product).where(Product.status == ProductStatus.active)
     if country_id:
@@ -188,15 +210,63 @@ async def products(
         stmt = stmt.where(Product.category == category)
     if popular:
         stmt = stmt.where(Product.is_popular)
-    return list((await session.scalars(stmt.order_by(Product.sort_order, Product.id))).all())
+    rows = list((await session.scalars(stmt.order_by(Product.sort_order, Product.id))).unique().all())
+    return await _storefront(session, rows, tag)
+
+
+async def _storefront(session: SessionDep, rows: list[Product], tag: str | None = None) -> list[Product]:
+    """Applies the store settings: sale window, out-of-stock visibility and catalog sort order."""
+    now = utcnow()
+    rows = [p for p in rows if p.on_sale_window(now) and (not tag or tag in (p.tags or []))]
+    if not await settings_service.get_bool(session, "show_out_of_stock"):
+        rows = [p for p in rows if p.stock > 0]
+    sort = await settings_service.get_value(session, "catalog_sort")
+    if sort == "price_asc":
+        rows.sort(key=lambda p: p.effective_price(now))
+    elif sort == "price_desc":
+        rows.sort(key=lambda p: p.effective_price(now), reverse=True)
+    elif sort == "popular":
+        rows.sort(key=lambda p: (not p.is_popular, p.sort_order, p.id))
+    elif sort == "new":
+        rows.sort(key=lambda p: p.id, reverse=True)
+    return rows
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
 async def product_detail(product_id: int, session: SessionDep) -> Product:
     product = await session.get(Product, product_id)
-    if product is None or product.status != ProductStatus.active:
+    if product is None or product.status != ProductStatus.active or not product.on_sale_window(utcnow()):
         raise HTTPException(404, "Товар не найден")
     return product
+
+
+PROMO_CHECKS_PER_MIN = 15  # guards against guessing codes
+_promo_checks: dict[int, deque[float]] = defaultdict(deque)
+
+
+class PromoCheck(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    product_id: int = Field(gt=0)
+    quantity: int = Field(default=1, ge=1, le=10)
+
+
+@router.post("/promo/check")
+async def promo_check(body: PromoCheck, user: UserDep, session: SessionDep) -> dict:
+    """Preview of a promo code discount. The order applies it again on the server, under a lock."""
+    hits = _promo_checks[user.id]
+    now = time.monotonic()
+    while hits and now - hits[0] > 60:
+        hits.popleft()
+    if len(hits) >= PROMO_CHECKS_PER_MIN:
+        raise HTTPException(429, "Слишком много попыток. Попробуйте через минуту.")
+    hits.append(now)
+    product = await session.get(Product, body.product_id)
+    if product is None or product.status != ProductStatus.active:
+        raise HTTPException(404, "Товар не найден")
+    subtotal = product.effective_price(utcnow()) * body.quantity
+    res = await promo_service.preview(session, user, body.code, product, subtotal)
+    return {"code": res["code"], "discount": float(res["discount"]), "total": float(res["total"]),
+            "subtotal": float(subtotal)}
 
 
 @router.get("/premium-numbers", response_model=list[PremiumNumberOut])
@@ -230,11 +300,10 @@ async def me(user: UserDep) -> object:
 @router.get("/me/admin-access")
 async def my_admin_access(user: UserDep, session: SessionDep) -> dict:
     """Whether to show the «Админ-панель» button. Decided on the server from the Telegram id in signed initData."""
-    from app.services.admin_access import MINIAPP_ROLES, telegram_role
+    from app.services.admin_access import telegram_access
 
-    role = await telegram_role(session, user.telegram_id)
-    allowed = role in MINIAPP_ROLES
-    return {"allowed": allowed, "role": role if allowed else None}
+    role, _ = await telegram_access(session, user.telegram_id)
+    return {"allowed": role is not None, "role": role}
 
 
 @router.get("/me/transactions", response_model=list[TransactionOut])
@@ -266,13 +335,11 @@ async def create_order(body: OrderCreate, user: UserDep, session: SessionDep) ->
         product_id=body.product_id,
         premium_number_id=body.premium_number_id,
         quantity=body.quantity,
+        promo_code=body.promo_code or None,
     )
-    await session.commit()
     if created:
-        await telegram.notify_admins(
-            f"🆕 Новый заказ #{order.id}\n{order.item_title} × {order.quantity}\nСумма: {order.total} грн",
-            kind="orders",
-        )
+        await notifications.notify_customer(session, order, "order_created")  # off by default (template switch)
+    await session.commit()
     return order
 
 
@@ -286,8 +353,40 @@ async def _order_detail(session: SessionDep, order: Order) -> OrderDetailOut:
     payments = (await session.scalars(select(Payment).where(Payment.order_id == order.id).order_by(Payment.id))).all()
     data = OrderDetailOut.model_validate(order, from_attributes=True)
     data.payments = [PaymentOut.model_validate(p, from_attributes=True) for p in payments]
+    review = any(p.status == PaymentStatus.awaiting_confirmation for p in payments)
+    data.stage = order_service.order_stage(order, payment_review=review)
     if order.product and order.status.value in ("paid", "processing", "completed"):
         data.delivery_note = order.product.delivery_note or None
+    # secrets are decrypted only for a delivered order of this buyer (never before confirmed payment)
+    if order.status == OrderStatus.completed and order.fulfillment_status == "delivered":
+        units = (
+            await session.scalars(
+                select(InventoryItem)
+                .where(InventoryItem.order_id == order.id, InventoryItem.status == "sold")
+                .order_by(InventoryItem.id)
+            )
+        ).all()
+        data.delivered_items = inventory.delivered_secrets(list(units))
+        data.login_code_available = bool(units)
+        phone_rows = (
+            await session.scalars(
+                select(PhoneInventory)
+                .where(PhoneInventory.sold_order_id == order.id, PhoneInventory.status == "SOLD")
+                .order_by(PhoneInventory.id)
+            )
+        ).all()
+        data.delivered_items += [r.phone_e164 for r in phone_rows]
+        # label hint for the buyer: phone numbers vs encrypted keys/codes
+        if phone_rows and not units:
+            data.delivered_kind = "phone"
+        elif data.delivered_items:
+            data.delivered_kind = "secret"
+    data.support_ticket_id = await session.scalar(
+        select(SupportTicket.id)
+        .where(SupportTicket.order_id == order.id, SupportTicket.status != TicketStatus.closed)
+        .order_by(SupportTicket.id.desc())
+        .limit(1)
+    )
     return data
 
 
@@ -299,16 +398,21 @@ async def order_detail(order_id: int, user: UserDep, session: SessionDep) -> Ord
     return await _order_detail(session, order)
 
 
+@router.get("/orders/{order_id}/code", response_model=LoginCodeOut)
+async def order_login_code(order_id: int, user: UserDep, session: SessionDep) -> LoginCodeOut:
+    """Read the latest Telegram login code from the sold .session linked to this order."""
+    result = await session_codes.code_for_order(session, order_id, user.id)
+    return LoginCodeOut(code=result["code"] or "", order_id=order_id, source=result.get("source"))
+
+
 @router.post("/orders/{order_id}/pay", response_model=PayResponse)
 async def pay_order(order_id: int, body: PayRequest, user: UserDep, session: SessionDep) -> PayResponse:
     result = await payment_service.start_order_payment(session, user, order_id, body.method)
     await session.commit()
+    if body.method in (PaymentMethod.balance, PaymentMethod.test):
+        # instant delivery right after the payment commit; the queued worker job is the durable fallback
+        await fulfillment.run_now(order_id)
     order = await session.get(Order, order_id, populate_existing=True)
-    if body.method in (PaymentMethod.balance, PaymentMethod.test) and order is not None:
-        await telegram.notify(user.telegram_id, f"✅ Заказ #{order.id} оплачен. Статус: {order.status.value}")
-        await telegram.notify_admins(
-            f"💰 Заказ #{order.id} оплачен ({body.method.value}) — {order.total} грн", kind="orders"
-        )
     return PayResponse(
         payment=PaymentOut.model_validate(result.payment, from_attributes=True),
         order=OrderOut.model_validate(order, from_attributes=True) if order else None,
@@ -349,12 +453,17 @@ async def payment_status(payment_id: int, user: UserDep, session: SessionDep) ->
 @router.post("/payments/{payment_id}/submit", response_model=PaymentOut)
 async def submit_manual(payment_id: int, body: ManualSubmit, user: UserDep, session: SessionDep) -> Payment:
     payment = await payment_service.submit_manual(session, user, payment_id, body.comment)
+    order = await session.get(Order, payment.order_id) if payment.order_id else None
+    values = {
+        "payment_id": f"#{payment.id}", "price": f"{payment.amount} грн",
+        "order_no": (order.public_id or f"#{order.id}") if order else "пополнение баланса",
+        "reason": body.comment or "-", "customer_name": f"{user.telegram_id} @{user.username or '-'}",
+    }
+    if order is not None:
+        await notifications.notify_customer(session, order, "payment_review", dedupe=f"payment_review:{payment.id}")
+        await rules.fire(session, "payment_review", order.id)
+    await notifications.notify_staff(session, "staff_payment_review", values, dedupe=f"review:{payment.id}")
     await session.commit()
-    await telegram.notify_admins(
-        f"🧾 Ручной платёж #{payment.id} ожидает проверки: {payment.amount} грн\n"
-        f"Пользователь: {user.telegram_id} @{user.username or '-'}\nКомментарий: {body.comment or '-'}",
-        kind="payments",
-    )
     return payment
 
 
@@ -369,20 +478,45 @@ async def my_tickets(user: UserDep, session: SessionDep) -> list:
 
 @router.post("/support/tickets", response_model=TicketDetailOut, status_code=201)
 async def create_ticket(body: TicketCreate, user: UserDep, session: SessionDep) -> SupportTicket:
-    open_count = await session.scalar(
-        select(func.count(SupportTicket.id)).where(
-            SupportTicket.user_id == user.id, SupportTicket.status != TicketStatus.closed
-        )
-    )
-    if (open_count or 0) >= 5:
-        raise HTTPException(429, "У вас слишком много открытых обращений")
-    ticket = SupportTicket(user_id=user.id, subject=body.subject.strip())
-    ticket.messages.append(SupportMessage(is_admin=False, text=body.text.strip()))
-    session.add(ticket)
+    ticket = await support_service.create_ticket(session, user, body.subject, body.text, category=body.category)
     await session.commit()
-    await telegram.notify_admins(
-        f"🆘 Новое обращение #{ticket.id}: {ticket.subject}\n\n{body.text[:500]}", kind="tickets"
+    return await _load_ticket(session, ticket.id, user.id)
+
+
+@router.get("/support/categories")
+async def support_categories() -> list[dict]:
+    return [
+        {"key": k, "label": v, "text": support_service.DEFAULT_TEXT[k]} for k, v in support_service.CATEGORIES.items()
+    ]
+
+
+class CountryRequest(BaseModel):
+    country: str = Field(min_length=2, max_length=60)
+    quantity: int = Field(default=1, ge=1, le=100)
+    comment: str = Field(default="", max_length=1000)
+
+
+@router.post("/support/country-request", response_model=TicketDetailOut, status_code=201)
+async def country_request(body: CountryRequest, user: UserDep, session: SessionDep) -> SupportTicket:
+    """A country that isn't in the catalog: a support ticket for the operator (no payment is taken here)."""
+    if not await settings_service.get_bool(session, "country_requests_enabled"):
+        raise HTTPException(403, "Заказ стран вне каталога сейчас недоступен")
+    country = " ".join(body.country.split())
+    text = f"Хочу заказать номер страны: {country}\nКоличество: {body.quantity}"
+    if body.comment.strip():
+        text += f"\nКомментарий: {body.comment.strip()}"
+    ticket = await support_service.create_ticket(
+        session, user, f"Запрос страны: {country}"[:160], text, category="country_request"
     )
+    await session.commit()
+    return await _load_ticket(session, ticket.id, user.id)
+
+
+@router.post("/orders/{order_id}/support", response_model=TicketDetailOut, status_code=201)
+async def order_support(order_id: int, body: OrderSupportCreate, user: UserDep, session: SessionDep) -> SupportTicket:
+    """One tap from the order card: opens (or continues) a support ticket linked to this order."""
+    ticket = await support_service.ticket_for_order(session, user, order_id, body.category, body.text)
+    await session.commit()
     return await _load_ticket(session, ticket.id, user.id)
 
 
@@ -411,6 +545,8 @@ async def ticket_reply(ticket_id: int, body: MessageCreate, user: UserDep, sessi
     session.add(SupportMessage(ticket_id=ticket.id, is_admin=False, text=body.text.strip()))
     ticket.status = TicketStatus.open
     ticket.updated_at = utcnow()
+    await notifications.notify_staff(
+        session, "staff_new_ticket", {"ticket_id": f"#{ticket.id}", "reason": f"новое сообщение\n{body.text.strip()[:400]}"}
+    )
     await session.commit()
-    await telegram.notify_admins(f"💬 Сообщение в обращении #{ticket.id}:\n{body.text[:500]}", kind="tickets")
     return await _load_ticket(session, ticket_id, user.id)

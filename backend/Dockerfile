@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_
 WORKDIR /srv
 COPY backend/requirements.txt /srv/requirements.txt
 RUN pip install -r requirements.txt && useradd --create-home --uid 10001 app \
-    && mkdir -p /srv/backups && chown app:app /srv/backups
+    && mkdir -p /srv/backups /srv/sessions && chown app:app /srv/backups /srv/sessions
 COPY backend/app /srv/app
 COPY backend/migrations /srv/migrations
 COPY backend/alembic.ini /srv/alembic.ini

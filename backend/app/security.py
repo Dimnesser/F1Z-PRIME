@@ -122,6 +122,7 @@ def check_admin_credentials(username: str, password: str, settings: Any) -> bool
 def create_admin_token(
     username: str, secret_key: str, ttl_hours: float, level: str = "owner", source: str = "env",
     telegram_id: int | None = None,
+    token_version: int | None = None,
 ) -> str:
     """`role: admin` marks an admin-panel token; `lvl` is owner/admin/support,
     `src` is env (.env owner), db (staff account) or tg (Telegram Mini App session, `tid` = Telegram id)."""
@@ -131,6 +132,8 @@ def create_admin_token(
     }
     if telegram_id is not None:
         payload["tid"] = telegram_id
+    if token_version is not None:
+        payload["tv"] = token_version  # bumped by "revoke all sessions"
     return jwt.encode(payload, secret_key, algorithm="HS256")
 
 

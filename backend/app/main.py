@@ -11,14 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import admin, admin_reports, admin_system, public
+from app.api import admin, admin_inventory, admin_phones, admin_promo, admin_reports, admin_rules, admin_sms, admin_staff, admin_system, public, sms
 from app.config import get_settings
 from app.db import dispose_engine, session_factory
-from app.services import backup, monitor
-from app.services import settings as settings_service
-from app.services import telegram
+from app.services import monitor
 from app.services.common import ServiceError
-from app.services.orders import expire_stale_orders
 
 log = logging.getLogger("f1z")
 
@@ -33,71 +30,20 @@ def setup_logging() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
-async def _expiry_loop() -> None:
-    while True:
-        try:
-            async with session_factory()() as session:
-                if await settings_service.get_bool(session, "expire_reservations"):
-                    n = await expire_stale_orders(session)
-                    await session.commit()
-                    if n:
-                        log.info("expired %s unpaid orders", n)
-        except Exception:  # noqa: BLE001
-            log.exception("expiry loop failed")
-        await asyncio.sleep(60)
-
-
-async def _automation_loop() -> None:
-    """Retries undelivered notifications, low-stock alerts and the daily backup (each one switchable)."""
-    alerted: set[int] = set()
-    tick = 0
-    while True:
-        try:
-            async with session_factory()() as session:
-                retry = await settings_service.get_bool(session, "notification_retry")
-                low_stock = await settings_service.get_bool(session, "low_stock_alerts")
-                auto_backup = await settings_service.get_bool(session, "auto_backup")
-                threshold = int(await settings_service.get_value(session, "low_stock_threshold") or 5)
-            if retry:
-                await telegram.retry_outbox()
-            if low_stock and tick % 10 == 0:
-                await _low_stock_alerts(alerted, threshold)
-            if auto_backup and tick % 30 == 0:
-                age = backup.last_backup_age_hours()
-                if age is None or age >= 24:
-                    await backup.create_backup()
-        except Exception:  # noqa: BLE001
-            log.exception("automation loop failed")
-        tick += 1
-        await asyncio.sleep(60)
-
-
-async def _low_stock_alerts(alerted: set[int], threshold: int) -> None:
-    from sqlalchemy import select
-
-    from app.models import Product, ProductStatus
-
-    async with session_factory()() as session:
-        rows = (
-            await session.scalars(select(Product).where(Product.status == ProductStatus.active))
-        ).unique().all()
-    low = {p.id: p for p in rows if p.stock <= threshold}
-    alerted.intersection_update(low)  # restocked products can alert again later
-    fresh = [p for pid, p in low.items() if pid not in alerted]
-    if fresh:
-        lines = "\n".join(f"• {p.title}: {p.stock} шт." for p in fresh[:20])
-        await telegram.notify_admins(f"📉 Низкий остаток (≤ {threshold}):\n{lines}")
-        alerted.update(p.id for p in fresh)
-
-
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     s = get_settings()
     log.info("F1Z PRIME API starting (env=%s, dev_mode=%s)", s.environment, s.dev_mode)
-    tasks = [asyncio.create_task(_expiry_loop()), asyncio.create_task(_automation_loop())] if s.run_background_tasks else []
+    # Background work (fulfillment, notifications, expiry, backups) runs in the separate worker process
+    # (app.worker); with RUN_BACKGROUND_TASKS the API embeds it, for single-process setups.
+    task = None
+    if s.run_background_tasks:
+        from app import worker
+
+        task = asyncio.create_task(worker.main(install_signals=False))
     yield
-    for task in tasks:
+    if task is not None:
         task.cancel()
     await dispose_engine()
 
@@ -149,6 +95,13 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(admin_reports.router)
     app.include_router(admin_system.router)
+    app.include_router(admin_staff.router)
+    app.include_router(admin_inventory.router)
+    app.include_router(admin_phones.router)
+    app.include_router(sms.router)
+    app.include_router(admin_sms.router)
+    app.include_router(admin_promo.router)
+    app.include_router(admin_rules.router)
     return app
 
 

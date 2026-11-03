@@ -1,97 +1,140 @@
 import { useQuery } from '@tanstack/react-query'
-import clsx from 'clsx'
-import { motion } from 'framer-motion'
-import { Search, SearchX } from 'lucide-react'
+import { Gem, PackageOpen, SearchX, Smartphone } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { CountryCard, ProductMini } from '../components/Cards'
-import { EmptyState, PageTitle, SectionHeader, Skeleton } from '../components/ui'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { CountryRow, ProductCard } from '../components/Cards'
+import { CountryRequestButton } from '../components/CountryRequest'
+import { GuaranteeCard } from '../components/Guarantee'
+import { Chips, EmptyState, ErrorState, PageTitle, SearchInput, Skeleton } from '../components/ui'
+import { useToast } from '../components/Toast'
 import { api } from '../lib/api'
-import { useCountries } from '../lib/queries'
+import { useCategories, useCountries } from '../lib/queries'
 import { useShop } from '../lib/shop'
 import { haptic } from '../lib/telegram'
 
-const SORTS = [
-  { id: 'default', label: 'Все' },
-  { id: 'stock', label: 'В наличии' },
-  { id: 'cheap', label: 'Дешевле' },
-  { id: 'expensive', label: 'Дороже' },
-] as const
+type Sort = 'default' | 'stock' | 'cheap' | 'expensive'
+const SORTS: { value: Sort; label: string }[] = [
+  { value: 'default', label: 'Все' },
+  { value: 'stock', label: 'В наличии' },
+  { value: 'cheap', label: 'Дешевле' },
+  { value: 'expensive', label: 'Дороже' },
+]
 
 export default function Catalog() {
   const navigate = useNavigate()
+  const toast = useToast()
   const { checkout } = useShop()
-  const { data: countries, isLoading } = useCountries()
-  const { data: digital } = useQuery({ queryKey: ['products', 'other'], queryFn: () => api.products() })
+  const [params, setParams] = useSearchParams()
+  const cat = params.get('cat') ?? 'numbers'
+  const countries = useCountries()
+  const products = useQuery({ queryKey: ['products', 'all'], queryFn: () => api.products() })
+  const { data: categories } = useCategories()
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<(typeof SORTS)[number]['id']>('default')
+  const [sort, setSort] = useState<Sort>('default')
 
-  const list = useMemo(() => {
-    let l = (countries ?? []).filter((c) => `${c.name} ${c.dial_code} ${c.code}`.toLowerCase().includes(q.toLowerCase()))
+  const sections = (categories ?? []).filter((c) => c.slug !== 'premium')
+  const tabs = sections.length ? sections : [{ slug: 'numbers', title: 'Номера по странам', count: 0, stock: 0, icon: 'globe' }]
+  const setCat = (slug: string) => setParams(slug === 'numbers' ? {} : { cat: slug }, { replace: true })
+
+  const query = q.trim().toLowerCase()
+  const countryList = useMemo(() => {
+    let l = (countries.data ?? []).filter((c) => `${c.name} ${c.dial_code} ${c.code}`.toLowerCase().includes(query))
     if (sort === 'stock') l = l.filter((c) => c.stock > 0)
     if (sort === 'cheap') l = [...l].sort((a, b) => (a.price ?? 0) - (b.price ?? 0))
     if (sort === 'expensive') l = [...l].sort((a, b) => (b.price ?? 0) - (a.price ?? 0))
     return l
-  }, [countries, q, sort])
-
-  const others = (digital ?? []).filter((p) => p.category !== 'numbers')
+  }, [countries.data, query, sort])
+  const productList = (products.data ?? []).filter(
+    (p) => p.category === cat && `${p.title} ${p.description}`.toLowerCase().includes(query),
+  )
 
   const buy = async (productId: number) => {
     try {
       checkout({ kind: 'product', product: await api.product(productId) })
     } catch (e) {
       haptic.error()
-      console.error(e)
+      toast((e as Error).message, 'error')
     }
   }
 
+  const loading = cat === 'numbers' ? countries.isLoading : products.isLoading
+  const error = cat === 'numbers' ? countries.error : products.error
+
   return (
     <div>
-      <PageTitle title="Каталог" subtitle="Номера по странам с актуальными ценами и остатками" />
-      <div className="relative mb-3">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted" />
-        <input className="input pl-11" placeholder="Страна или код, например +48" value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
-      <div className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 no-scrollbar">
-        {SORTS.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => { setSort(s.id); haptic.select() }}
-            className={clsx(
-              'pressable shrink-0 rounded-full px-4 py-2 text-[13px] font-bold ring-1 transition',
-              sort === s.id ? 'bg-ink text-bg ring-ink' : 'bg-card text-muted ring-white/[0.07]',
-            )}
-          >
-            {s.label}
+      <PageTitle title="Каталог" />
+
+      <SearchInput value={q} onChange={setQ} placeholder={cat === 'numbers' ? 'Страна или код, например +48' : 'Поиск товара'} />
+
+      {/* other storefronts */}
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        {[
+          { to: '/sms', icon: Smartphone, title: 'Номер для SMS', tint: 'bg-accent/12 text-accent' },
+          { to: '/numbers', icon: Gem, title: 'Красивые номера', tint: 'bg-warning/12 text-warning' },
+        ].map(({ to, icon: Icon, title, tint }) => (
+          <button key={to} type="button" onClick={() => { haptic.select(); navigate(to) }} className="card pressable flex min-w-0 items-center gap-3 px-3.5 py-3 text-left">
+            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[11px] ${tint}`}><Icon className="h-[18px] w-[18px]" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14.5px] font-medium leading-tight">{title}</span>
+              
+            </span>
+            
           </button>
         ))}
       </div>
 
-      {isLoading ? (
-        <div className="space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-3xl" />)}</div>
-      ) : list.length === 0 ? (
-        <EmptyState icon={<SearchX className="h-7 w-7" />} title="Ничего не найдено" text="Попробуйте изменить запрос или фильтр" />
-      ) : (
-        <motion.div className="stagger space-y-3">
-          {list.map((c) => (
-            <CountryCard
-              key={c.id}
-              c={c}
-              onOpen={() => c.product_id && navigate(`/product/${c.product_id}`)}
-              onBuy={() => c.product_id && buy(c.product_id)}
-            />
-          ))}
-        </motion.div>
+      {tabs.length > 1 && (
+        <Chips
+          className="mt-5"
+          value={cat}
+          onChange={setCat}
+          options={tabs.map((c) => ({ value: c.slug, label: c.title, count: c.slug === 'numbers' ? undefined : c.count }))}
+        />
       )}
 
-      {others.length > 0 && (
-        <section className="mt-7">
-          <SectionHeader title="✨ Цифровые товары" />
-          <motion.div className="stagger -mx-4 flex gap-3 overflow-x-auto px-4 no-scrollbar">
-            {others.map((p) => <ProductMini key={p.id} p={p} onOpen={() => navigate(`/product/${p.id}`)} />)}
-          </motion.div>
-        </section>
+      {cat === 'numbers' && (
+        <Chips className="mt-3" value={sort} onChange={setSort} options={SORTS} />
       )}
+
+      <div className="mt-4">
+        {loading ? (
+          <div className={cat === 'numbers' ? 'space-y-1.5' : 'grid grid-cols-2 gap-2'}>
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className={cat === 'numbers' ? 'h-[64px] rounded-[18px]' : 'h-[178px] rounded-[22px]'} />)}
+          </div>
+        ) : error ? (
+          <ErrorState text={(error as Error).message} onRetry={() => (cat === 'numbers' ? countries.refetch() : products.refetch())} />
+        ) : cat === 'numbers' ? (
+          countryList.length === 0 ? (
+            <EmptyState icon={<SearchX className="h-7 w-7" />} title="Ничего не найдено" text="Попробуйте изменить запрос или фильтр" />
+          ) : (
+            <div className="card hairline overflow-hidden">
+              {countryList.map((c) => (
+                <CountryRow
+                  key={c.id}
+                  c={c}
+                  onOpen={() => c.product_id && navigate(`/product/${c.product_id}`)}
+                  onBuy={() => c.product_id && buy(c.product_id)}
+                />
+              ))}
+            </div>
+          )
+        ) : productList.length === 0 ? (
+          <EmptyState icon={<PackageOpen className="h-7 w-7" />} title={query ? 'Ничего не найдено' : 'Пока пусто'} text={query ? 'Попробуйте другой запрос' : 'Товары этой категории скоро появятся'} />
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {productList.map((p) => <ProductCard key={p.id} p={p} onOpen={() => navigate(`/product/${p.id}`)} />)}
+          </div>
+        )}
+      </div>
+
+      {cat === 'numbers' && !loading && (
+        <div className="mt-2 space-y-3">
+          <p className="px-4 text-[12.5px] leading-snug text-muted">Нажмите на цену, чтобы купить сразу, или на страну — чтобы посмотреть цену в долларах и Stars. Номер выдаётся после подтверждения оплаты.</p>
+          <CountryRequestButton />
+          <GuaranteeCard category="numbers" />
+        </div>
+      )}
+      {cat !== 'numbers' && <div className="mt-3"><GuaranteeCard category={cat} /></div>}
     </div>
   )
 }

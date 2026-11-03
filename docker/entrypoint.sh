@@ -12,6 +12,9 @@ case "$1" in
   bot)
     exec python -m bot.main
     ;;
+  worker)
+    exec python -m app.worker
+    ;;
   *)
     exec "$@"
     ;;

@@ -11,6 +11,10 @@ export interface Country {
 export interface CountryCatalog extends Country {
   product_id: number | null
   price: number | null
+  /** prices are set separately by the shop (not converted by a rate) */
+  price_usd: number | null
+  price_stars: number | null
+  stars_enabled: boolean
   stock: number
 }
 
@@ -20,9 +24,20 @@ export interface Product {
   description: string
   category: string
   price: number
+  /** regular price, shown crossed out while a sale is active */
+  old_price: number | null
   stock: number
   is_popular: boolean
   country: Country | null
+  tags: string[]
+  attributes: Record<string, string>
+  max_per_order: number | null
+  price_usd: number | null
+  price_stars: number | null
+  stars_enabled: boolean
+  fulfillment_mode: 'auto' | 'manual' | 'review'
+  /** delivered automatically right after payment (confirmed stock + auto mode) */
+  instant: boolean
 }
 
 export interface PremiumNumber {
@@ -79,12 +94,30 @@ export interface Order {
   created_at: string
   product_id: number | null
   premium_number_id: number | null
+  public_id: string | null
+  fulfillment_status: string | null
+  stage: OrderStage
+  discount: number
+  promo_code: string | null
+  stars_total: number | null
+  usd_total: number | null
 }
+
+export type OrderStage =
+  | 'pending_payment' | 'payment_review' | 'paid' | 'fulfillment_pending' | 'processing'
+  | 'delivered' | 'manual_review' | 'failed' | 'cancelled' | 'refunded'
 
 export interface OrderDetail extends Order {
   payments: Payment[]
   delivery_note: string | null
+  /** keys / codes — only present once the order is delivered */
+  delivered_items: string[]
+  delivered_kind: string | null
+  support_ticket_id: number | null
 }
+
+export interface SupportCategory { key: string; label: string; text: string }
+export interface PromoPreview { code: string; discount: number; total: number; subtotal: number }
 
 export type PayMethod = 'balance' | 'stars' | 'manual' | 'test'
 
@@ -130,4 +163,13 @@ export interface Ticket {
 
 export interface TicketDetail extends Ticket {
   messages: { id: number; is_admin: boolean; text: string; created_at: string }[]
+}
+
+export interface SmsItem { country: string; service: string; price: number; count: number }
+export interface SmsCountry { code: string; title: string }
+export interface SmsService { code: string; title: string }
+export interface SmsPrices { configured: boolean; countries: SmsCountry[]; services: SmsService[]; items: SmsItem[] }
+export interface SmsActivation {
+  id: number; status: string; service: string; country: string; phone_number: string | null
+  code: string | null; cost: number; refunded: boolean; created_at: string | null; expires_at: string | null
 }

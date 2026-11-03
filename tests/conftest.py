@@ -35,6 +35,12 @@ from app.db import dispose_engine, session_factory  # noqa: E402
 from app.security import sign_init_data  # noqa: E402
 
 TABLES = [
+    "owned_sms_inbox", "owned_sms_numbers",
+    "delivery_outbox", "sms_activations",
+    "phone_verifications", "phone_inventory",
+    "rule_runs", "automation_rules", "promo_redemptions", "promo_codes", "price_history",
+    "inventory_items", "stock_movements", "jobs", "task_runs", "incidents", "refunds", "notification_templates",
+    "approval_requests", "staff_notifications", "admin_prefs", "roles",
     "order_events", "notification_outbox", "admin_users", "categories",
     "admin_actions", "support_messages", "support_tickets", "balance_transactions", "payments",
     "orders", "premium_numbers", "products", "countries", "users", "settings",
@@ -72,9 +78,23 @@ async def clean_db():
         await session.execute(text(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY CASCADE"))
         await session.commit()
     await seed(demo=True)
+    from app.api import admin as admin_api
+    from app.api import deps
+
+    deps._admin_writes.clear()  # rate-limit windows are per process; each test starts fresh
+    admin_api._login_attempts.clear()
     yield
     await dispose_engine()
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_sms_catalog_cache():
+    """The SMS provider catalog is process-cached (TTL); reset it per test to avoid cross-test bleed."""
+    from app.services import sms
+    sms._catalog_cache.update(at=0.0, data=None)
+    yield
+    sms._catalog_cache.update(at=0.0, data=None)
 
 
 @pytest.fixture(autouse=True)

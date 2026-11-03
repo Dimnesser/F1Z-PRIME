@@ -24,6 +24,20 @@ class Settings(BaseSettings):
     admin_telegram_ids: str = ""  # comma separated ids that receive notifications
 
     secret_key: str = "change-me-please-use-a-long-random-string"
+    # Key for encrypting inventory secrets (base64, 32 bytes). Derived from SECRET_KEY when empty.
+    inventory_key: str = ""
+    # SMS-activation provider (sms-activate.org). Key lives only in .env on the server, never in git.
+    sms_activate_api_key: str = ""
+    sms_activate_base_url: str = "https://api.sms-activate.org/stubs/handler_api.php"
+    # number source for SMS-activations: "provider" (sms-activate) or "owned" (operator's own pool + gateway)
+    sms_source: str = "provider"
+    # shared secret the operator's own SMS gateway presents to the ingest webhook (never in git)
+    sms_gateway_token: str = ""
+    # Telethon (my.telegram.org) — used to read login codes from sold .session files
+    telegram_api_id: int = 0
+    telegram_api_hash: str = ""
+    # Directory with Telethon .session files (basename = digits from inventory secret)
+    sessions_dir: str = "/srv/sessions"
     admin_username: str = "admin"
     admin_password: str = ""  # plain (dev) — prefer ADMIN_PASSWORD_HASH in production
     admin_password_hash: str = ""  # pbkdf2_sha256:iterations:salt:hash
@@ -37,6 +51,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
     log_level: str = "INFO"
     run_background_tasks: bool = True
+
+    @field_validator("telegram_api_id", mode="before")
+    @classmethod
+    def _api_id(cls, v: object) -> object:
+        if v is None or v == "":
+            return 0
+        return v
 
     @field_validator("environment")
     @classmethod

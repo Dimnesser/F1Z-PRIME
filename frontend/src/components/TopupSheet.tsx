@@ -63,7 +63,7 @@ export function TopupSheet({ open, onClose }: { open: boolean; onClose: () => vo
     <Sheet open={open} onClose={onClose} title="Пополнение баланса">
       {done ? (
         <div className="space-y-4 py-4 text-center">
-          <div className={clsx('mx-auto grid h-16 w-16 place-items-center rounded-3xl', done === 'paid' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')}>
+          <div className={clsx('mx-auto grid h-16 w-16 place-items-center rounded-[22px]', done === 'paid' ? 'bg-success/12 text-success' : 'bg-warning/12 text-warning')}>
             {done === 'paid' ? <CheckCircle2 className="h-8 w-8" /> : <Clock3 className="h-8 w-8" />}
           </div>
           <p className="text-sm text-muted">
@@ -75,25 +75,29 @@ export function TopupSheet({ open, onClose }: { open: boolean; onClose: () => vo
         <ManualPayment payment={manual.payment} instructions={manual.instructions} onSubmitted={() => setDone('review')} />
       ) : (
         <div className="space-y-4">
-          <div className="rounded-3xl bg-brand-soft p-5 text-center ring-1 ring-white/10">
-            <div className="text-[12px] font-semibold uppercase tracking-wider text-muted">Сумма пополнения</div>
-            <div className="mt-1 flex items-center justify-center gap-1">
+          <label className="block rounded-[22px] bg-ov/[0.04] p-5 text-center ring-1 ring-inset ring-line/70 focus-within:ring-primary/50">
+            <span className="eyebrow">Сумма пополнения</span>
+            <span className="mt-1 flex items-center justify-center gap-1.5">
               <input
                 type="number"
                 inputMode="numeric"
+                aria-label="Сумма пополнения, грн"
                 value={amount || ''}
                 onChange={(e) => setAmount(Math.max(0, Math.min(50000, Number(e.target.value))))}
-                className="w-40 bg-transparent text-center font-display text-4xl font-bold outline-none"
+                className="num w-40 bg-transparent text-center text-[40px] font-bold tracking-tight outline-none"
               />
-              <span className="font-display text-xl text-muted">грн</span>
-            </div>
-          </div>
+              <span className="text-[20px] font-semibold text-muted">грн</span>
+            </span>
+            <span className={clsx('mt-1 block text-[12px]', amount > 0 && amount < min ? 'text-danger' : 'text-muted')}>Минимум {money(min)}</span>
+          </label>
           <div className="grid grid-cols-4 gap-2">
             {PRESETS.map((p) => (
               <button
                 key={p}
                 onClick={() => { setAmount(p); haptic.select() }}
-                className={clsx('pressable rounded-xl py-2.5 text-sm font-bold ring-1', amount === p ? 'bg-primary/20 text-ink ring-primary/50' : 'bg-card text-muted ring-white/[0.06]')}
+                type="button"
+                aria-pressed={amount === p}
+                className={clsx('num pressable h-11 rounded-[14px] text-[14px] font-semibold ring-1 ring-inset', amount === p ? 'bg-primary/15 text-ink ring-primary/50' : 'bg-surface text-muted ring-line')}
               >
                 {p}
               </button>

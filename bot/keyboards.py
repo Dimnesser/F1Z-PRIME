@@ -30,6 +30,7 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog"),
             InlineKeyboardButton(text="💎 Красивые номера", callback_data="premium"),
         ],
+        [InlineKeyboardButton(text="📱 Купить номер (SMS)", callback_data="sms:menu")],
         [
             InlineKeyboardButton(text="👤 Профиль", callback_data="profile"),
             InlineKeyboardButton(text="📦 Мои покупки", callback_data="orders"),
@@ -44,6 +45,19 @@ def back(to: str = "menu", text: str = "⬅️ Назад") -> list[InlineKeyboa
 
 def menu_row() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu")]
+
+
+def login_code_button(order_id: int) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text="🔄 Получить код входа", callback_data=f"ocode:{order_id}")
+
+
+def order_actions(order_id: int, *, with_login_code: bool = False) -> InlineKeyboardMarkup:
+    actions: list[list[InlineKeyboardButton | None]] = []
+    if with_login_code:
+        actions.append([login_code_button(order_id)])
+    actions.append(back("orders"))
+    actions.append(menu_row())
+    return _rows(*actions)
 
 
 def rows(*r: list[InlineKeyboardButton | None]) -> InlineKeyboardMarkup:

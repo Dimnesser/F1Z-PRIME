@@ -1,7 +1,7 @@
 import { initData } from './telegram'
 import type {
   Category, CountryCatalog, Me, Order, OrderDetail, PayMethod, PayResponse, Payment, PremiumNumber, Product,
-  PublicConfig, Ticket, TicketDetail, Transaction,
+  PromoPreview, PublicConfig, SmsActivation, SmsPrices, SupportCategory, Ticket, TicketDetail, Transaction,
 } from './types'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
@@ -37,7 +37,7 @@ export const api = {
   config: () => request<PublicConfig>('/api/config'),
   me: () => request<Me>('/api/me'),
   transactions: () => request<Transaction[]>('/api/me/transactions'),
-  adminAccess: () => request<{ allowed: boolean; role: 'owner' | 'admin' | null }>('/api/me/admin-access'),
+  adminAccess: () => request<{ allowed: boolean; role: string | null }>('/api/me/admin-access'),
   countries: () => request<CountryCatalog[]>('/api/countries'),
   categories: () => request<Category[]>('/api/categories'),
   products: (params: { category?: string; popular?: boolean; country_id?: number } = {}) => {
@@ -51,8 +51,15 @@ export const api = {
   premiumOne: (id: number) => request<PremiumNumber>(`/api/premium-numbers/${id}`),
   orders: () => request<Order[]>('/api/orders'),
   order: (id: number) => request<OrderDetail>(`/api/orders/${id}`),
-  createOrder: (body: { product_id?: number; premium_number_id?: number; quantity?: number; idempotency_key: string }) =>
+  createOrder: (body: { product_id?: number; premium_number_id?: number; quantity?: number; idempotency_key: string; promo_code?: string }) =>
     post<Order>('/api/orders', body),
+  checkPromo: (code: string, product_id: number, quantity: number) =>
+    post<PromoPreview>('/api/promo/check', { code, product_id, quantity }),
+  countryRequest: (country: string, quantity: number, comment: string) =>
+    post<TicketDetail>('/api/support/country-request', { country, quantity, comment }),
+  supportCategories: () => request<SupportCategory[]>('/api/support/categories'),
+  orderSupport: (orderId: number, category: string, text = '') =>
+    post<TicketDetail>(`/api/orders/${orderId}/support`, { category, text }),
   pay: (orderId: number, method: PayMethod) => post<PayResponse>(`/api/orders/${orderId}/pay`, { method }),
   cancel: (orderId: number) => post<Order>(`/api/orders/${orderId}/cancel`),
   topup: (amount: number, method: PayMethod) => post<PayResponse>('/api/balance/topup', { amount, method }),
@@ -62,7 +69,15 @@ export const api = {
   ticket: (id: number) => request<TicketDetail>(`/api/support/tickets/${id}`),
   createTicket: (subject: string, text: string) => post<TicketDetail>('/api/support/tickets', { subject, text }),
   replyTicket: (id: number, text: string) => post<TicketDetail>(`/api/support/tickets/${id}/messages`, { text }),
+  smsPrices: (country?: string) => request<SmsPrices>(`/api/sms/prices${country ? `?country=${country}` : ''}`),
+  smsPurchase: (country: string, service: string, idempotency_key: string) =>
+    post<SmsActivation>('/api/sms/purchase', { country, service, idempotency_key }),
+  smsActivations: () => request<SmsActivation[]>('/api/sms/activations'),
+  smsActivation: (id: number) => request<SmsActivation>(`/api/sms/activations/${id}`),
+  smsCancel: (id: number) => post<SmsActivation>(`/api/sms/activations/${id}/cancel`),
 }
+
+export const SMS_ACTIVE = ['RESERVED', 'API_PENDING', 'WAITING', 'CANCEL_REQUESTED', 'RECONCILIATION_REQUIRED']
 
 export function newIdempotencyKey(): string {
   const rnd = crypto.getRandomValues(new Uint8Array(12))

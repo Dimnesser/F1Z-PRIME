@@ -1,4 +1,4 @@
-import type { OrderStatus, Payment } from './types'
+import type { OrderStage, OrderStatus, Payment } from './types'
 
 export const money = (v: number | null | undefined, currency = 'грн') =>
   v === null || v === undefined
@@ -20,6 +20,25 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; tone: 'violet' |
   expired: { label: 'Истёк', tone: 'gray' },
   refunded: { label: 'Возврат', tone: 'red' },
 }
+
+type Tone = 'violet' | 'cyan' | 'green' | 'amber' | 'red' | 'gray'
+/** explicit order lifecycle stage computed on the server */
+export const ORDER_STAGE: Record<OrderStage, { label: string; tone: Tone; hint: string }> = {
+  pending_payment: { label: 'Ожидает оплаты', tone: 'amber', hint: 'Товар зарезервирован за вами до конца таймера.' },
+  payment_review: { label: 'Платёж на проверке', tone: 'amber', hint: 'Администратор проверяет поступление средств. Мы сообщим в Telegram.' },
+  paid: { label: 'Оплачен', tone: 'cyan', hint: 'Оплата подтверждена, заказ передан на выдачу.' },
+  fulfillment_pending: { label: 'Готовим выдачу', tone: 'cyan', hint: 'Оплата подтверждена, товар выдаётся автоматически.' },
+  processing: { label: 'Выдаётся', tone: 'violet', hint: 'Выдача товара в процессе.' },
+  delivered: { label: 'Выполнен', tone: 'green', hint: 'Товар выдан — данные ниже.' },
+  manual_review: { label: 'У оператора', tone: 'violet', hint: 'Заказ оплачен и передан оператору — выдача в ближайшее время.' },
+  failed: { label: 'Задержка выдачи', tone: 'red', hint: 'Оплата сохранена, мы уже разбираемся. Можно написать в поддержку.' },
+  cancelled: { label: 'Отменён', tone: 'gray', hint: 'Заказ отменён или резерв истёк.' },
+  refunded: { label: 'Возврат', tone: 'red', hint: 'По заказу выполнен возврат.' },
+}
+
+const usdFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
+export const usd = (v: number | null | undefined) => (v === null || v === undefined ? '' : usdFmt.format(v))
+export const stars = (v: number | null | undefined) => (v === null || v === undefined ? '' : `${v} ⭐`)
 
 export const PAYMENT_STATUS: Record<Payment['status'], string> = {
   pending: 'Ожидает оплаты',

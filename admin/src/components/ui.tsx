@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Inbox, Info, Loader2, Search, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import {
   createContext, useCallback, useContext, useEffect, useRef, useState,
   type ButtonHTMLAttributes, type ReactNode,
@@ -17,20 +18,20 @@ export function Btn({
       {...rest}
       disabled={rest.disabled || loading}
       className={clsx(
-        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50',
         size === 'sm' && 'h-8 px-3 text-[13px]',
         size === 'md' && 'h-10 px-4 text-sm',
         size === 'lg' && 'h-12 px-5 text-[15px]',
         variant === 'primary' && 'bg-primary text-white shadow-glow hover:bg-primary-deep',
-        variant === 'secondary' && 'bg-white/[0.07] text-ink hover:bg-white/[0.11]',
+        variant === 'secondary' && 'bg-elevated text-ink ring-1 ring-inset ring-line hover:bg-[#1D2537]',
         variant === 'ghost' && 'text-muted hover:bg-white/[0.06] hover:text-ink',
-        variant === 'outline' && 'border border-white/[0.1] text-ink hover:bg-white/[0.05]',
+        variant === 'outline' && 'border border-line text-ink hover:bg-white/[0.04]',
         variant === 'danger' && 'bg-danger/15 text-danger hover:bg-danger/25',
         variant === 'success' && 'bg-success/15 text-success hover:bg-success/25',
         className,
       )}
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {loading && <Loader2 className="h-4 w-4 animate-spin" aria-label="Загрузка" />}
       {children}
     </button>
   )
@@ -43,7 +44,7 @@ export function IconBtn({ label, className, children, ...rest }: ButtonHTMLAttri
       aria-label={label}
       title={label}
       {...rest}
-      className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted transition hover:bg-white/[0.06] hover:text-ink disabled:opacity-40', className)}
+      className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted transition hover:bg-white/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 disabled:opacity-40', className)}
     >
       {children}
     </button>
@@ -53,18 +54,18 @@ export function IconBtn({ label, className, children, ...rest }: ButtonHTMLAttri
 // ------------------------------------------------------------------- badges
 
 const TONES = {
-  violet: 'bg-primary/15 text-primary-soft',
-  cyan: 'bg-secondary/15 text-secondary-soft',
-  green: 'bg-success/15 text-success',
-  amber: 'bg-warning/15 text-warning',
-  red: 'bg-danger/15 text-danger',
-  gray: 'bg-white/[0.07] text-muted',
+  violet: 'bg-primary/12 text-primary-soft ring-primary/20',
+  cyan: 'bg-secondary/12 text-secondary-soft ring-secondary/20',
+  green: 'bg-success/12 text-success ring-success/20',
+  amber: 'bg-warning/12 text-warning ring-warning/20',
+  red: 'bg-danger/12 text-danger ring-danger/20',
+  gray: 'bg-white/[0.06] text-muted ring-white/10',
 }
 export type Tone = keyof typeof TONES
 
 export function Badge({ tone = 'violet', children, dot, className }: { tone?: Tone; children: ReactNode; dot?: boolean; className?: string }) {
   return (
-    <span className={clsx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold', TONES[tone], className)}>
+    <span className={clsx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ring-1 ring-inset', TONES[tone], className)}>
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
       {children}
     </span>
@@ -105,9 +106,9 @@ export function OrderBadge({ status, inReview }: { status: string; inReview?: bo
 
 export function PageHead({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-6">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-7">
       <div className="min-w-0">
-        <h1 className="font-display text-[22px] font-bold tracking-tight sm:text-2xl">{title}</h1>
+        <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em] sm:text-[28px]">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       </div>
       {children && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{children}</div>}
@@ -120,7 +121,7 @@ export function Card({ title, action, children, className, pad = true }: { title
     <section className={clsx('card min-w-0', pad && 'p-4 sm:p-5', className)}>
       {(title || action) && (
         <div className={clsx('mb-4 flex items-center justify-between gap-3', !pad && 'px-4 pt-4 sm:px-5 sm:pt-5')}>
-          {title && <h2 className="font-display text-[15px] font-semibold">{title}</h2>}
+          {title && <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>}
           {action}
         </div>
       )}
@@ -139,6 +140,46 @@ export function Field({ label, hint, children, className }: { label: string; hin
   )
 }
 
+/** KPI tile: label, value, hint, colored icon; optional link and trend (percent vs previous period). */
+export function StatCard({ icon: Icon, label, value, sub, tone = 'violet', to, trend, size = 'md' }: {
+  icon: typeof Inbox; label: string; value: ReactNode; sub?: ReactNode; tone?: Tone; to?: string; trend?: number | null; size?: 'md' | 'sm'
+}) {
+  const tint: Record<Tone, string> = {
+    violet: 'bg-primary/12 text-primary-soft', cyan: 'bg-secondary/12 text-secondary', green: 'bg-success/12 text-success',
+    amber: 'bg-warning/12 text-warning', red: 'bg-danger/12 text-danger', gray: 'bg-white/[0.06] text-muted',
+  }
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[12.5px] font-medium text-muted">{label}</span>
+        <span className={clsx('grid shrink-0 place-items-center rounded-lg', size === 'sm' ? 'h-7 w-7' : 'h-8 w-8', tint[tone])}><Icon className="h-4 w-4" /></span>
+      </div>
+      <div className={clsx('tabular mt-2 truncate font-figure font-semibold leading-tight', size === 'sm' ? 'text-[21px]' : 'text-[26px] sm:text-[28px]')}>{value}</div>
+      <div className="mt-1 flex min-w-0 items-center gap-2">
+        {trend !== undefined && trend !== null && (
+          <span className={clsx('tabular shrink-0 rounded-md px-1.5 py-px text-[11px] font-semibold', trend >= 0 ? 'bg-success/12 text-success' : 'bg-danger/12 text-danger')}>
+            {trend >= 0 ? '↑' : '↓'} {Math.abs(trend).toFixed(0)}%
+          </span>
+        )}
+        {sub && <span className="truncate text-xs text-muted">{sub}</span>}
+      </div>
+    </>
+  )
+  const cls = clsx('card block min-w-0 transition', size === 'sm' ? 'p-3.5' : 'p-4 sm:p-5')
+  return to ? <Link to={to} className={clsx(cls, 'hover:border-primary/30 hover:bg-[#131a2a]')}>{body}</Link> : <div className={cls}>{body}</div>
+}
+
+/** Dot + label for live statuses (pulsing when `live`). */
+export function StatusIndicator({ tone, label, live }: { tone: Tone; label: ReactNode; live?: boolean }) {
+  const dot: Record<Tone, string> = { violet: 'bg-primary', cyan: 'bg-secondary', green: 'bg-success', amber: 'bg-warning', red: 'bg-danger', gray: 'bg-muted' }
+  const text: Record<Tone, string> = { violet: 'text-primary-soft', cyan: 'text-secondary', green: 'text-success', amber: 'text-warning', red: 'text-danger', gray: 'text-muted' }
+  return (
+    <span role="status" className={clsx('inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-semibold', text[tone])}>
+      <span className={clsx('h-2 w-2 rounded-full', dot[tone], live && 'live-dot')} />{label}
+    </span>
+  )
+}
+
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div className={clsx('relative overflow-hidden rounded-xl bg-white/[0.05]', className)}>
@@ -150,8 +191,8 @@ export function Skeleton({ className }: { className?: string }) {
 export function Empty({ icon: Icon = Inbox, title = 'Нет данных', text, action }: { icon?: typeof Inbox; title?: string; text?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center px-6 py-12 text-center">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/[0.05] text-muted"><Icon className="h-5 w-5" /></div>
-      <div className="mt-3 text-sm font-semibold">{title}</div>
+      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary-soft ring-1 ring-inset ring-primary/20"><Icon className="h-5 w-5" /></div>
+      <div className="mt-3 text-[15px] font-semibold">{title}</div>
       {text && <div className="mt-1 max-w-xs text-sm text-muted">{text}</div>}
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -160,7 +201,7 @@ export function Empty({ icon: Icon = Inbox, title = 'Нет данных', text,
 
 export function ErrorBox({ text, onRetry }: { text: string; onRetry?: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger">
+    <div role="alert" className="flex items-center justify-between gap-3 rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger ring-1 ring-inset ring-danger/20">
       <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" /> {text}</span>
       {onRetry && <Btn size="sm" variant="danger" onClick={onRetry}>Повторить</Btn>}
     </div>
@@ -187,7 +228,7 @@ export function Chips<T extends string>({ value, onChange, options, className }:
   return (
     <div className={clsx('no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0', className)}>
       {options.map((o) => (
-        <button key={o.value} type="button" onClick={() => onChange(o.value)} className={clsx('chip', value === o.value && 'chip-active')}>
+        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)} className={clsx('chip', value === o.value && 'chip-active')}>
           {o.label}
           {o.count !== undefined && <span className="tabular text-[11px] text-muted">{o.count}</span>}
         </button>
@@ -198,13 +239,15 @@ export function Chips<T extends string>({ value, onChange, options, className }:
 
 export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; onChange: (v: T) => void; tabs: { value: T; label: string; icon?: typeof Inbox }[] }) {
   return (
-    <div className="no-scrollbar -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-white/[0.06] px-4 sm:mx-0 sm:px-0">
+    <div className="no-scrollbar -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-line/70 px-4 sm:mx-0 sm:px-0">
       {tabs.map((t) => (
         <button
           key={t.value}
           type="button"
           onClick={() => onChange(t.value)}
-          className={clsx('-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-semibold transition',
+          role="tab"
+          aria-selected={value === t.value}
+          className={clsx('-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition',
             value === t.value ? 'border-primary text-ink' : 'border-transparent text-muted hover:text-ink')}
         >
           {t.icon && <t.icon className="h-4 w-4" />}{t.label}
@@ -263,20 +306,20 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={clsx(
-          'pop-in relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-surface shadow-pop sm:max-h-[88vh] sm:rounded-2xl',
+          'pop-in relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-line bg-card shadow-pop sm:max-h-[88vh] sm:rounded-2xl',
           size === 'sm' && 'sm:max-w-sm', size === 'md' && 'sm:max-w-lg', size === 'lg' && 'sm:max-w-2xl', size === 'xl' && 'sm:max-w-4xl',
         )}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-white/15 sm:hidden" />
         <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-3 sm:pt-5">
           <div className="min-w-0">
-            <h3 className="font-display text-[17px] font-semibold leading-snug">{title}</h3>
+            <h3 className="text-[17px] font-semibold leading-snug tracking-tight">{title}</h3>
             {subtitle && <div className="mt-0.5 text-sm text-muted">{subtitle}</div>}
           </div>
           <IconBtn label="Закрыть" className="-mr-2 -mt-1 h-9 w-9" onClick={onClose}><X className="h-5 w-5" /></IconBtn>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
-        {footer && <div className="pb-safe shrink-0 border-t border-white/[0.06] bg-surface px-5 py-3"><div className="flex flex-wrap justify-end gap-2">{footer}</div></div>}
+        {footer && <div className="pb-safe shrink-0 border-t border-line/70 bg-card px-5 py-3"><div className="flex flex-wrap justify-end gap-2">{footer}</div></div>}
       </div>
     </div>
   )
@@ -355,7 +398,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[100] flex flex-col items-center gap-2 px-4 lg:bottom-6 lg:left-auto lg:right-6 lg:items-end">
         {items.map((t) => (
-          <div key={t.id} role="status" className="toast-in pointer-events-auto flex max-w-sm items-start gap-2.5 rounded-2xl border border-white/10 bg-elevated px-4 py-3 text-sm font-medium shadow-pop">
+          <div key={t.id} role={t.kind === 'error' ? 'alert' : 'status'} className="toast-in pointer-events-auto flex max-w-sm items-start gap-2.5 rounded-2xl border border-line bg-elevated px-4 py-3 text-sm font-medium shadow-pop">
             {t.kind === 'success' && <CheckCircle2 className="mt-px h-[18px] w-[18px] shrink-0 text-success" />}
             {t.kind === 'error' && <AlertTriangle className="mt-px h-[18px] w-[18px] shrink-0 text-danger" />}
             {t.kind === 'info' && <Info className="mt-px h-[18px] w-[18px] shrink-0 text-secondary" />}
@@ -402,7 +445,7 @@ export function DataTable<T>({
       <div className="card hidden overflow-hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="border-b border-white/[0.06] bg-white/[0.015]">
+            <thead className="border-b border-line/70 bg-white/[0.02]">
               <tr>
                 {selectable && (
                   <th className="w-10 pl-4"><input type="checkbox" className="h-4 w-4 accent-primary" checked={allChecked} onChange={(e) => onToggleAll?.(e.target.checked)} aria-label="Выбрать все" /></th>
@@ -410,7 +453,7 @@ export function DataTable<T>({
                 {columns.map((c, i) => <th key={i} className={clsx('th', c.align === 'right' && 'text-right', c.className)}>{c.header}</th>)}
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/[0.05]">
+            <tbody className="divide-y divide-line/60">
               {rows.map((r) => {
                 const key = rowKey(r)
                 return (

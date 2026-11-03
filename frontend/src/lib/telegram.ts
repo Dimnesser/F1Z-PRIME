@@ -23,6 +23,7 @@ interface TgWebApp {
   openTelegramLink?(url: string): void
   openLink?(url: string): void
   showConfirm?(msg: string, cb: (ok: boolean) => void): void
+  onEvent?(event: string, cb: () => void): void
   HapticFeedback?: {
     impactOccurred(style: HapticStyle): void
     notificationOccurred(type: 'error' | 'success' | 'warning'): void
@@ -51,12 +52,21 @@ export function initTelegram() {
   try {
     tg.ready()
     tg.expand()
-    if (tg.isVersionAtLeast('6.1')) {
-      tg.setHeaderColor?.('#09090F')
-      tg.setBackgroundColor?.('#09090F')
-    }
-    if (tg.isVersionAtLeast('7.10')) tg.setBottomBarColor?.('#09090F')
     if (tg.isVersionAtLeast('7.7')) tg.disableVerticalSwipes?.()
+  } catch {
+    /* older clients */
+  }
+}
+
+/** Paints Telegram's header / background / bottom bar in the app background color (theme switch). */
+export function paintTelegramChrome(color: string) {
+  if (!tg) return
+  try {
+    if (tg.isVersionAtLeast('6.1')) {
+      tg.setHeaderColor?.(color)
+      tg.setBackgroundColor?.(color)
+    }
+    if (tg.isVersionAtLeast('7.10')) tg.setBottomBarColor?.(color)
   } catch {
     /* older clients */
   }

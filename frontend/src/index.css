@@ -2,73 +2,144 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ design tokens
+   F1Z PRIME · Midnight Premium. Colors are RGB channels so Tailwind can apply opacity.
+   Dark is the default; [data-theme='light'] follows Telegram's light scheme (or the user's choice). */
 :root {
   color-scheme: dark;
+  --bg: 8 11 18;
+  --surface: 17 22 36;
+  --elevated: 23 30 46;
+  --line: 37 45 64;
+  --ov: 255 255 255;
+  --primary: 117 107 255;
+  --primary-soft: 164 157 255;
+  --on-primary: 255 255 255;
+  --accent: 52 213 197;
+  --ink: 244 246 255;
+  --muted: 146 156 177;
+  --success: 57 214 160;
+  --warning: 255 181 71;
+  --danger: 255 97 120;
+
+  --shadow-card: 0 18px 36px -30px rgb(0 0 0 / 0.9);
+  --shadow-pop: 0 24px 60px -16px rgb(0 0 0 / 0.75);
+  --glow-1: rgb(117 107 255 / 0.16);
+  --glow-2: rgb(52 213 197 / 0.08);
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --nav-h: 64px;
 }
 
-html, body, #root { background: #09090F; min-height: 100%; }
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: 243 245 250;
+  --surface: 255 255 255;
+  --elevated: 238 241 247;
+  --line: 223 228 238;
+  --ov: 15 23 42;
+  --primary: 91 80 240;
+  --primary-soft: 75 64 216;
+  --accent: 14 159 146;
+  --ink: 14 18 32;
+  --muted: 90 100 122;
+  --success: 15 159 110;
+  --warning: 183 118 11;
+  --danger: 219 56 82;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 10px 24px -20px rgb(15 23 42 / 0.22);
+  --shadow-pop: 0 24px 60px -18px rgb(15 23 42 / 0.3);
+  --glow-1: rgb(91 80 240 / 0.08);
+  --glow-2: rgb(14 159 146 / 0.05);
+}
+
+html, body, #root { background: rgb(var(--bg)); min-height: 100%; }
 
 body {
   @apply font-sans text-ink antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  text-rendering: optimizeLegibility;
 }
 
+/* one quiet ambient light at the top instead of a full-screen glow */
 body::before {
   content: '';
   position: fixed;
-  inset: -20% -20% auto -20%;
-  height: 520px;
+  inset: 0 0 auto 0;
+  height: 360px;
   pointer-events: none;
   background:
-    radial-gradient(40% 50% at 20% 20%, rgba(139, 92, 246, 0.22), transparent 70%),
-    radial-gradient(35% 45% at 85% 10%, rgba(34, 211, 238, 0.14), transparent 70%);
+    radial-gradient(60% 70% at 15% 0%, var(--glow-1), transparent 70%),
+    radial-gradient(45% 60% at 95% 0%, var(--glow-2), transparent 70%);
   z-index: 0;
 }
 
+:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 2px; border-radius: 12px; }
+:focus:not(:focus-visible) { outline: none; }
+button, a { touch-action: manipulation; }
+
 @layer components {
-  .glass {
-    @apply border border-white/[0.07] bg-[#15151f]/90;
-  }
+  /* grouped surface: no outline, a hairline top highlight gives the edge (Telegram / iOS inset-group feel) */
   .card {
-    @apply rounded-3xl border border-white/[0.06] bg-card shadow-card;
+    @apply rounded-[22px] bg-surface;
+    box-shadow: inset 0 1px 0 rgb(var(--ov) / 0.04), var(--shadow-card);
   }
-  .text-gradient {
-    @apply bg-brand bg-clip-text text-transparent;
-  }
+  .card-soft { @apply rounded-[20px] bg-ov/[0.035] ring-1 ring-inset ring-line/60; }
+  .hairline > * + * { box-shadow: inset 0 1px 0 rgb(var(--line) / 0.55); }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { scrollbar-width: none; }
   .pressable {
-    @apply transition-transform duration-150 active:scale-[0.97];
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur-fast), opacity var(--dur-fast);
   }
+  .pressable:active:not(:disabled) { transform: scale(0.97); }
   .input {
-    @apply w-full rounded-2xl border border-white/[0.08] bg-surface px-4 py-3.5 text-[15px] text-ink outline-none transition placeholder:text-muted/70 focus:border-primary/60 focus:ring-4 focus:ring-primary/15;
+    @apply h-12 w-full rounded-[16px] border border-transparent bg-surface px-4 text-[16px] text-ink outline-none transition placeholder:text-muted/80 focus:border-primary/70 focus:ring-4 focus:ring-primary/15 disabled:opacity-60;
   }
+  textarea.input { @apply h-auto py-3 leading-relaxed; }
+  .chip {
+    @apply inline-flex h-9 shrink-0 select-none items-center gap-1.5 whitespace-nowrap rounded-full bg-surface px-4 text-[14px] font-medium text-muted transition-colors;
+  }
+  .chip[aria-pressed='true'], .chip-active { @apply border-transparent bg-ink text-bg; }
+  .eyebrow { @apply text-[13px] font-medium text-muted; }
+  .num { font-variant-numeric: tabular-nums; }
+  .text-gradient { @apply bg-brand bg-clip-text text-transparent; }
 }
 
-.pb-nav { padding-bottom: calc(96px + var(--safe-bottom)); }
+.pb-nav { padding-bottom: calc(var(--nav-h) + 28px + var(--safe-bottom)); }
+.sticky-cta { bottom: calc(var(--nav-h) + 16px + var(--safe-bottom)); }
 
-/* Content entrance animations are pure CSS: if a WebView pauses or skips them,
+/* Entrance animations are pure CSS: if a WebView pauses or skips them,
    the element simply stays visible (no JS-driven opacity:0 that can get stuck). */
-@keyframes f1z-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
-.fade-in { animation: f1z-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.stagger > * { animation: f1z-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
-.stagger > *:nth-child(2) { animation-delay: 40ms; }
-.stagger > *:nth-child(3) { animation-delay: 80ms; }
-.stagger > *:nth-child(4) { animation-delay: 120ms; }
-.stagger > *:nth-child(5) { animation-delay: 160ms; }
-.stagger > *:nth-child(6) { animation-delay: 200ms; }
-.stagger > *:nth-child(7) { animation-delay: 240ms; }
-.stagger > *:nth-child(8) { animation-delay: 280ms; }
-.stagger > *:nth-child(9) { animation-delay: 320ms; }
-.stagger > *:nth-child(10) { animation-delay: 360ms; }
-.stagger > *:nth-child(11) { animation-delay: 400ms; }
-.stagger > *:nth-child(12) { animation-delay: 440ms; }
+@keyframes f1z-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes f1z-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes f1z-sheet { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes f1z-pop { from { opacity: 0; transform: translateY(-10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes f1z-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes f1z-ring { 0% { box-shadow: 0 0 0 0 currentColor; } 100% { box-shadow: 0 0 0 6px transparent; } }
+.fade-in { animation: f1z-in var(--dur-base) var(--ease-out); }
+.overlay-in { animation: f1z-fade 180ms ease-out; }
+.sheet-in { animation: f1z-sheet 280ms var(--ease-out); }
+.toast-in { animation: f1z-pop 220ms var(--ease-out); }
+.live-dot { animation: f1z-pulse 1.6s ease-in-out infinite; }
+.stagger > * { animation: f1z-in 0.36s var(--ease-out) backwards; }
+.stagger > *:nth-child(2) { animation-delay: 30ms; }
+.stagger > *:nth-child(3) { animation-delay: 60ms; }
+.stagger > *:nth-child(4) { animation-delay: 90ms; }
+.stagger > *:nth-child(5) { animation-delay: 120ms; }
+.stagger > *:nth-child(6) { animation-delay: 150ms; }
+.stagger > *:nth-child(7) { animation-delay: 180ms; }
+.stagger > *:nth-child(8) { animation-delay: 210ms; }
+.stagger > *:nth-child(n+9) { animation-delay: 240ms; }
 @media (prefers-reduced-motion: reduce) {
-  .fade-in, .stagger > * { animation: none; }
+  .fade-in, .overlay-in, .sheet-in, .toast-in, .stagger > *, .live-dot { animation: none; }
+  .animate-shimmer, .animate-spin { animation-duration: 3s; }
+  .pressable:active:not(:disabled) { transform: none; }
 }

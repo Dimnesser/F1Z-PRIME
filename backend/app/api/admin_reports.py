@@ -8,7 +8,8 @@ from fastapi.responses import Response
 from sqlalchemy import Select, case, func, or_, select
 
 from app.api.admin import PAID_STATUSES, _paginate, csv_response, date_range, local_date
-from app.api.deps import ManagerDep, SessionDep, StaffDep
+from app.api.deps import SessionDep
+from app.api.deps import perm as P
 from app.models import (
     AdminAction,
     BalanceTransaction,
@@ -18,6 +19,7 @@ from app.models import (
     Payment,
     PaymentKind,
     PaymentStatus,
+    PhoneInventory,
     PremiumNumber,
     PremiumStatus,
     Product,
@@ -49,7 +51,7 @@ def _series(rows: list, start: date, days: int, keys: tuple[str, ...]) -> list[d
 
 
 @router.get("/dashboard")
-async def dashboard(admin: StaffDep, session: SessionDep, days: int = Query(30, ge=7, le=365)) -> dict:
+async def dashboard(admin: P("analytics.view"), session: SessionDep, days: int = Query(30, ge=7, le=365)) -> dict:
     today = await _today(session)
     start = today - timedelta(days=days - 1)
     paid_day = local_date(Order.paid_at)
@@ -80,6 +82,14 @@ async def dashboard(admin: StaffDep, session: SessionDep, days: int = Query(30, 
     )
     failed_payments = await session.scalar(
         select(func.count(Payment.id)).where(Payment.status == PaymentStatus.rejected)
+    )
+    # paid orders whose automatic delivery failed and need an operator — a key health signal
+    failed_fulfillments = await session.scalar(
+        select(func.count(Order.id)).where(Order.fulfillment_status == "failed")
+    )
+    # phone-number warehouse: numbers ready to sell right now (derived from real rows)
+    phones_available = await session.scalar(
+        select(func.count(PhoneInventory.id)).where(PhoneInventory.status == "AVAILABLE")
     )
     open_tickets = await session.scalar(
         select(func.count(SupportTicket.id)).where(SupportTicket.status == TicketStatus.open)
@@ -126,7 +136,13 @@ async def dashboard(admin: StaffDep, session: SessionDep, days: int = Query(30, 
     recent_orders = (await session.scalars(select(Order).order_by(Order.id.desc()).limit(10))).unique().all()
     recent_users = (await session.scalars(select(User).order_by(User.id.desc()).limit(8))).all()
     sales = _series(sales_rows, start, days, ("revenue", "orders"))
+    if not admin.can("finance.view"):  # e.g. catalog manager: counts yes, money no
+        revenue = revenue_today = revenue_period = None
+        for x in sales:
+            x["revenue"] = 0.0
+        cat_rows = [(slug, 0, cnt) for slug, _, cnt in cat_rows]
     return {
+        "finance_hidden": not admin.can("finance.view"),
         "days": days,
         "today": today.isoformat(),
         "users": users or 0,
@@ -134,14 +150,16 @@ async def dashboard(admin: StaffDep, session: SessionDep, days: int = Query(30, 
         "orders": orders or 0,
         "paid_orders": paid_orders or 0,
         "orders_today": orders_today or 0,
-        "revenue": float(revenue or 0),
-        "revenue_today": float(revenue_today or 0),
-        "revenue_period": float(revenue_period or 0),
+        "revenue": float(revenue) if revenue is not None else None,
+        "revenue_today": float(revenue_today) if revenue_today is not None else None,
+        "revenue_period": float(revenue_period) if revenue_period is not None else None,
         "stock": int(stock or 0),
         "premium_available": premium_available or 0,
         "pending_orders": pending_orders or 0,
         "pending_payments": pending_payments or 0,
         "failed_payments": failed_payments or 0,
+        "failed_fulfillments": failed_fulfillments or 0,
+        "phones_available": phones_available or 0,
         "open_tickets": open_tickets or 0,
         "low_stock_threshold": threshold,
         "sales": sales,
@@ -166,7 +184,7 @@ async def dashboard(admin: StaffDep, session: SessionDep, days: int = Query(30, 
 
 @router.get("/finance/summary")
 async def finance_summary(
-    admin: ManagerDep,
+    admin: P("finance.view"),
     session: SessionDep,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -284,7 +302,7 @@ def _tx_dict(t: BalanceTransaction, u: User) -> dict:
 
 @router.get("/finance/transactions")
 async def transactions(
-    admin: ManagerDep,
+    admin: P("finance.view"),
     session: SessionDep,
     type: str | None = Query(None, pattern="^(topup|purchase|refund|admin_adjust)$"),
     search: str | None = Query(None, max_length=64),
@@ -301,7 +319,7 @@ async def transactions(
 
 @router.get("/finance/transactions/export.csv")
 async def export_transactions(
-    admin: ManagerDep,
+    admin: P("finance.export"),
     session: SessionDep,
     type: str | None = Query(None, pattern="^(topup|purchase|refund|admin_adjust)$"),
     date_from: date | None = None,
@@ -319,7 +337,7 @@ async def export_transactions(
 
 @router.get("/finance/report.csv")
 async def export_report(
-    admin: ManagerDep, session: SessionDep, date_from: date | None = None, date_to: date | None = None
+    admin: P("finance.export"), session: SessionDep, date_from: date | None = None, date_to: date | None = None
 ) -> Response:
     data = await finance_summary(admin, session, date_from, date_to)
     rows: list[list[object]] = [["Период", f"{data['date_from']} — {data['date_to']}"],
@@ -337,20 +355,43 @@ async def export_report(
 # ---------------------------------------------------------------- audit log
 
 
+@router.get("/actions/export.csv")
+async def export_actions(
+    admin: P("system.audit"), session: SessionDep, entity: str | None = Query(None, max_length=32),
+    who: str | None = Query(None, max_length=64), date_from: date | None = None, date_to: date | None = None,
+) -> Response:
+    stmt = select(AdminAction)
+    if entity:
+        stmt = stmt.where(AdminAction.entity == entity)
+    if who:
+        stmt = stmt.where(AdminAction.admin == who)
+    stmt = date_range(stmt, AdminAction.created_at, date_from, date_to)
+    rows = (await session.scalars(stmt.order_by(AdminAction.id.desc()).limit(50_000))).all()
+    import json as _json
+
+    return csv_response(
+        "f1z-audit.csv", ["id", "created_at", "admin", "action", "entity", "entity_id", "details"],
+        [[r.id, r.created_at, r.admin, r.action, r.entity, r.entity_id, _json.dumps(r.details, ensure_ascii=False)] for r in rows],
+    )
+
+
 @router.get("/actions")
 async def admin_actions(
-    admin: ManagerDep,
+    admin: P("system.audit"),
     session: SessionDep,
     limit: int = Query(100, ge=1, le=500),
     entity: str | None = Query(None, max_length=32),
     who: str | None = Query(None, max_length=64),
     page: int = Query(1, ge=1),
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> list[dict]:
     stmt = select(AdminAction)
     if entity:
         stmt = stmt.where(AdminAction.entity == entity)
     if who:
         stmt = stmt.where(AdminAction.admin == who)
+    stmt = date_range(stmt, AdminAction.created_at, date_from, date_to)
     rows = (await session.scalars(stmt.order_by(AdminAction.id.desc()).offset((page - 1) * limit).limit(limit))).all()
     return [
         {"id": r.id, "admin": r.admin, "action": r.action, "entity": r.entity, "entity_id": r.entity_id,

@@ -46,7 +46,7 @@ export default function Support({ onChange }: { onChange?: () => void }) {
       ]} />
       <Chips className="mb-3" value={assigned} onChange={setAssigned} options={[{ value: '', label: 'Любой оператор' }, { value: 'me', label: 'Мои' }, { value: 'none', label: 'Не назначены' }]} />
       {error && <ErrorBox text={error} onRetry={() => reload()} />}
-      <div className="card min-h-0 flex-1 divide-y divide-white/[0.05] overflow-y-auto lg:max-h-[calc(100vh-300px)]">
+      <div className="card min-h-0 flex-1 divide-y divide-line/60 overflow-y-auto lg:max-h-[calc(100vh-300px)]">
         {loading && <div className="space-y-2 p-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
         {tickets?.length === 0 && <Empty icon={MessageSquare} title="Обращений нет" />}
         {tickets?.map((t) => (
@@ -128,7 +128,7 @@ function Chat({ id, onBack, onChanged }: { id: number; onBack?: () => void; onCh
   const canAssignOthers = me.role !== 'support'
   return (
     <>
-      <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.06] bg-surface/80 px-3 py-3 backdrop-blur sm:px-5" style={{ paddingTop: onBack ? 'max(12px, env(safe-area-inset-top))' : undefined }}>
+      <div className="flex shrink-0 items-center gap-3 border-b border-line/70 bg-surface/80 px-3 py-3 backdrop-blur sm:px-5" style={{ paddingTop: onBack ? 'max(12px, env(safe-area-inset-top))' : undefined }}>
         {onBack && <IconBtn label="Назад" onClick={onBack}><ArrowLeft className="h-5 w-5" /></IconBtn>}
         <Avatar u={t.user} size={40} />
         <div className="min-w-0 flex-1">
@@ -140,10 +140,10 @@ function Chat({ id, onBack, onChanged }: { id: number; onBack?: () => void; onCh
           ? <Btn size="sm" variant="secondary" onClick={() => setStatus('closed')}><CheckCheck className="h-4 w-4" /><span className="hidden sm:inline">Закрыть</span></Btn>
           : <Btn size="sm" variant="secondary" onClick={() => setStatus('open')}><RotateCcw className="h-4 w-4" /><span className="hidden sm:inline">Открыть</span></Btn>}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-2 text-xs sm:px-5">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line/70 px-3 py-2 text-xs sm:px-5">
         <Badge tone={ST[t.status].t} dot>{ST[t.status].l}</Badge>
         <span className="text-muted">Оператор:</span>
-        <select className="h-8 rounded-lg border border-white/[0.08] bg-surface px-2 text-xs outline-none" value={t.assigned_to ?? ''} onChange={(e) => assign(e.target.value)}>
+        <select className="h-8 rounded-lg border border-line/70 bg-surface px-2 text-xs outline-none" value={t.assigned_to ?? ''} onChange={(e) => assign(e.target.value)}>
           <option value="">не назначен</option>
           {(operators ?? []).filter((o) => canAssignOthers || o.username === me.username || o.username === t.assigned_to)
             .map((o) => <option key={o.username} value={o.username}>{o.username}{o.username === me.username ? ' (я)' : ''}</option>)}
@@ -169,7 +169,7 @@ function Chat({ id, onBack, onChanged }: { id: number; onBack?: () => void; onCh
         })}
         <div ref={bottom} />
       </div>
-      <div className="pb-safe shrink-0 border-t border-white/[0.06] bg-surface/80 px-3 py-3 sm:px-5">
+      <div className="pb-safe shrink-0 border-t border-line/70 bg-surface/80 px-3 py-3 sm:px-5">
         <div className="no-scrollbar -mx-3 mb-2 flex gap-2 overflow-x-auto px-3 sm:mx-0 sm:px-0">
           {QUICK.map((qr) => <button key={qr} type="button" className="chip h-8 text-xs" onClick={() => setText(qr)}>{qr.length > 34 ? `${qr.slice(0, 34)}…` : qr}</button>)}
         </div>

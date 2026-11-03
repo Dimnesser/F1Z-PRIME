@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.models import OrderStatus, PaymentMethod, PremiumStatus, ProductStatus, TicketStatus
 
@@ -31,6 +31,9 @@ class CountryOut(ORM):
 class CountryCatalogOut(CountryOut):
     product_id: int | None = None
     price: Money | None = None
+    price_usd: Money | None = None
+    price_stars: int | None = None
+    stars_enabled: bool = True
     stock: int = 0
 
 
@@ -39,10 +42,20 @@ class ProductOut(ORM):
     title: str
     description: str
     category: str
-    price: Money
+    # current price (the sale price while a sale is active); old_price is shown crossed out
+    price: Money = Field(validation_alias=AliasChoices("price_now", "price"))
+    old_price: Money | None = Field(default=None, validation_alias="price_old")
     stock: int
     is_popular: bool
     country: CountryOut | None = None
+    tags: list[str] = []
+    attributes: dict[str, str] = {}
+    max_per_order: int | None = None
+    price_usd: Money | None = None
+    price_stars: int | None = None
+    stars_enabled: bool = True
+    fulfillment_mode: str = "manual"
+    instant: bool = False
 
 
 class PremiumNumberOut(ORM):
@@ -107,11 +120,31 @@ class OrderOut(ORM):
     created_at: datetime
     product_id: int | None
     premium_number_id: int | None
+    public_id: str | None = None
+    fulfillment_status: str | None = None
+    stage: str = ""
+    discount: Money = Decimal("0")
+    promo_code: str | None = None
+    stars_total: int | None = None
+    usd_total: Money | None = None
 
 
 class OrderDetailOut(OrderOut):
     payments: list[PaymentOut] = []
     delivery_note: str | None = None
+    # decrypted inventory units (keys/vouchers) or sold phone numbers — only after the order is delivered
+    delivered_items: list[str] = []
+    # what delivered_items are, so the buyer sees the right label: "phone" | "secret" | None
+    delivered_kind: str | None = None
+    support_ticket_id: int | None = None
+    # True when the order has sold inventory units that can yield a Telegram login code
+    login_code_available: bool = False
+
+
+class LoginCodeOut(BaseModel):
+    code: str
+    order_id: int
+    source: str | None = None
 
 
 class OrderCreate(BaseModel):
@@ -119,6 +152,7 @@ class OrderCreate(BaseModel):
     premium_number_id: int | None = Field(default=None, gt=0)
     quantity: int = Field(default=1, ge=1, le=10)
     idempotency_key: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
+    promo_code: str | None = Field(default=None, max_length=32)
 
 
 class PayRequest(BaseModel):
@@ -144,6 +178,12 @@ class ManualSubmit(BaseModel):
 class TicketCreate(BaseModel):
     subject: str = Field(min_length=3, max_length=160)
     text: str = Field(min_length=2, max_length=4000)
+    category: str = Field(default="general", pattern=r"^[a-z_]{2,32}$")
+
+
+class OrderSupportCreate(BaseModel):
+    category: str = Field(pattern=r"^[a-z_]{2,32}$")
+    text: str = Field(default="", max_length=4000)
 
 
 class MessageCreate(BaseModel):
@@ -163,6 +203,9 @@ class TicketOut(ORM):
     status: TicketStatus
     created_at: datetime
     updated_at: datetime
+    order_id: int | None = None
+    category: str = "general"
+    priority: str = "normal"
 
 
 class TicketDetailOut(TicketOut):
@@ -233,6 +276,19 @@ class ProductIn(BaseModel):
     is_popular: bool = False
     sort_order: int = Field(default=100, ge=0, le=10000)
     delivery_note: str = Field(default="", max_length=4000)
+    fulfillment_mode: Literal["auto", "manual", "review"] = "manual"
+    uses_inventory: bool = False
+    sale_price: Decimal | None = Field(default=None, gt=0, le=1_000_000, decimal_places=2)
+    sale_ends_at: datetime | None = None
+    tags: list[Annotated[str, Field(min_length=1, max_length=32)]] = Field(default_factory=list, max_length=20)
+    attributes: dict[str, Annotated[str, Field(max_length=200)]] = Field(default_factory=dict, max_length=30)
+    available_from: datetime | None = None
+    available_until: datetime | None = None
+    max_per_order: int | None = Field(default=None, ge=1, le=10)
+    max_per_user: int | None = Field(default=None, ge=1, le=10000)
+    price_usd: Decimal | None = Field(default=None, gt=0, le=100_000, decimal_places=2)
+    price_stars: int | None = Field(default=None, ge=1, le=1_000_000)
+    stars_enabled: bool = True
 
 
 class ProductPatch(BaseModel):
@@ -246,10 +302,33 @@ class ProductPatch(BaseModel):
     is_popular: bool | None = None
     sort_order: int | None = Field(default=None, ge=0, le=10000)
     delivery_note: str | None = Field(default=None, max_length=4000)
+    fulfillment_mode: Literal["auto", "manual", "review"] | None = None
+    uses_inventory: bool | None = None
+    stock_reason: str | None = Field(default=None, max_length=200)  # required when stock changes
+    sale_price: Decimal | None = Field(default=None, gt=0, le=1_000_000, decimal_places=2)
+    sale_ends_at: datetime | None = None
+    tags: list[Annotated[str, Field(min_length=1, max_length=32)]] | None = Field(default=None, max_length=20)
+    attributes: dict[str, Annotated[str, Field(max_length=200)]] | None = Field(default=None, max_length=30)
+    available_from: datetime | None = None
+    available_until: datetime | None = None
+    max_per_order: int | None = Field(default=None, ge=1, le=10)
+    max_per_user: int | None = Field(default=None, ge=1, le=10000)
+    price_usd: Decimal | None = Field(default=None, gt=0, le=100_000, decimal_places=2)
+    price_stars: int | None = Field(default=None, ge=1, le=1_000_000)
+    stars_enabled: bool | None = None
 
 
 class AdminProductOut(ProductOut):
+    price: Money  # base price; the public price may be the sale price
+    old_price: Money | None = None
+    sale_price: Money | None = None
+    sale_ends_at: datetime | None = None
+    available_from: datetime | None = None
+    available_until: datetime | None = None
+    max_per_user: int | None = None
     status: ProductStatus
+    fulfillment_mode: str = "manual"
+    uses_inventory: bool = False
     sort_order: int
     country_id: int | None
     delivery_note: str
@@ -344,7 +423,8 @@ class OrderEventOut(ORM):
 
 class ProductBulk(BaseModel):
     ids: list[int] = Field(min_length=1, max_length=500)
-    action: Literal["status", "price_set", "price_percent", "price_delta", "stock_set", "stock_delta", "category"]
+    action: Literal["status", "price_set", "price_percent", "price_delta", "stock_set", "stock_delta", "category",
+                    "sale_percent", "sale_clear", "tag_add", "tag_remove"]
     value: str = Field(max_length=64)
 
 

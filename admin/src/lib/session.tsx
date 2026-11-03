@@ -1,8 +1,13 @@
 import { createContext, useContext } from 'react'
-import type { Me, Role } from './types'
+import type { Me } from './types'
 
-export const SessionCtx = createContext<Me>({ username: '', role: 'support', role_label: '', dev_mode: false, environment: '' })
+export const SessionCtx = createContext<Me>({
+  username: '', role: 'viewer', role_label: '', dev_mode: false, environment: '', is_owner: false, permissions: [], limits: {}, key: '',
+})
 export const useMe = () => useContext(SessionCtx)
-export const can = (role: Role, ...allowed: Role[]) => allowed.includes(role)
-/** owner/admin can change the shop; support only works with tickets and reads data */
-export const useCanManage = () => can(useMe().role, 'owner', 'admin')
+
+/** Hides UI the admin can't use. The server checks every permission again on each request. */
+export const hasPerm = (me: Me, ...perms: string[]) => me.is_owner || perms.some((p) => me.permissions.includes(p))
+export const useCan = (...perms: string[]) => hasPerm(useMe(), ...perms)
+/** can change the catalog/shop data (used by older pages for edit buttons) */
+export const useCanManage = () => useCan('products.edit', 'orders.status')
